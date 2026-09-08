@@ -4,7 +4,7 @@
 
 - Project ID: `mc-odoo-tui-plugin`
 - Kind: `proprietary`
-- Scope: `repository | combined` — to confirm
+- Scope: `combined`
 - Primary repository: `https://github.com/imbundle/mc-odoo-tui-plugin`
 - Workspace: `/home/cyclone/Developer/projects/mc-odoo-tui-plugin`
 - Host integration: Mission Control plugin system
@@ -36,7 +36,7 @@
 - The service must preserve odoo-tui as the operational authority for validation, safety checks, lifecycle semantics, and evidence generation.
 - The adapter must define bounded timeouts, failure handling, redaction, and request/response logging without secrets.
 - The administrator password is a deliberate sensitive capability: normal responses expose only presence/state; a separate authenticated request may return the clear value when explicitly required. The value must never be logged, persisted, cached, or included in generic errors/evidence.
-- The transport between the plugin service and odoo-tui remains an explicit design decision; do not assume an HTTP API exists.
+- The host transport is Mission Control's `/api/local` contract; the adapter-to-odoo-tui execution boundary must be explicit and tested.
 
 ## Development Rules
 
@@ -98,4 +98,4 @@ Examples:
 - Do not modify odoo-tui runtime semantics without an explicit approved scope.
 - Do not alter Odoo databases, filestores, secrets, configuration, or process supervision as part of frontend work.
 - Do not commit local runtime state, generated private data, or credentials.
-- Do not begin implementation while the primary repository or integration model remains `TBD`.
+- Do not begin production implementation until the plan is `APPROVED` and the adapter execution strategy is verified.
