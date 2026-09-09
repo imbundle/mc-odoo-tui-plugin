@@ -1,36 +1,34 @@
-import type { ReactNode } from 'react';
+import React, { type ReactNode } from 'react';
 
-type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'ghost';
-type ButtonType = 'button' | 'submit';
+type ButtonVariant = 'primary' | 'positive' | 'secondary' | 'danger' | 'ghost';
 
-interface ButtonProps {
+type ButtonProps = {
   children: ReactNode;
   variant?: ButtonVariant;
   disabled?: boolean;
-  onClick?: () => void;
-  type?: ButtonType;
-}
+  onClick?: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  type?: 'button' | 'submit';
+  ariaLabel?: string;
+  testId?: string;
+};
 
-export function Button({
-  children,
-  variant = 'secondary',
-  disabled,
-  onClick,
-  type = 'button',
-}: ButtonProps) {
-  const styles = {
-    primary: 'border-emerald-400/30 bg-emerald-400/15 text-emerald-200 hover:bg-emerald-400/25',
-    secondary: 'border-white/10 bg-white/[0.05] text-text hover:bg-white/[0.09]',
-    danger: 'border-rose-400/30 bg-rose-400/10 text-rose-200 hover:bg-rose-400/20',
-    ghost: 'border-transparent bg-transparent text-text-muted hover:bg-white/[0.06] hover:text-text',
-  }[variant];
+const styles: Record<ButtonVariant, string> = {
+  primary: 'border-border bg-surface text-accent hover:border-border-subtle hover:bg-accent-subtle active:bg-accent/20 focus-visible:ring-accent/60',
+  positive: 'border-border bg-surface text-positive hover:border-border-subtle hover:bg-positive-subtle active:bg-positive/20 focus-visible:ring-positive/60',
+  secondary: 'border-border bg-surface text-text hover:border-border-subtle hover:bg-surface-raised active:bg-surface focus-visible:ring-border-subtle',
+  danger: 'border-border bg-surface text-negative hover:border-border-subtle hover:bg-negative-subtle active:bg-negative/20 focus-visible:ring-negative/60',
+  ghost: 'border-transparent bg-transparent text-text-muted hover:bg-surface hover:text-text active:bg-surface-raised focus-visible:ring-border',
+};
 
+export function Button({ children, variant = 'secondary', disabled = false, onClick, type = 'button', ariaLabel, testId }: ButtonProps) {
   return (
     <button
       type={type}
       disabled={disabled}
       onClick={onClick}
-      className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border px-3 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${styles}`}
+      aria-label={ariaLabel}
+      data-testid={testId}
+      className={`inline-flex min-h-[44px] min-w-[44px] items-center justify-center gap-2 rounded-lg border px-3 text-sm font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-surface disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-45 ${styles[variant]}`}
     >
       {children}
     </button>

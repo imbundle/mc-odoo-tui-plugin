@@ -1,0 +1,6 @@
+{
+  "clients": [
+    {"name": "acme", "release": "18", "environment": "local", "local_url": "http://127.0.0.1:8069"},
+    {"name": "demo", "release": "19", "environment": "local", "local_url": null}
+  ]
+}

@@ -1,1 +1,1 @@
-export { HelloWorldRoute as default } from './HelloWorldRoute';
+export { default } from './OdooTuiRoute';

@@ -1,0 +1,21 @@
+{
+  "name": "mc-odoo-tui-plugin-ui",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test:ui": "tsx ui/OdooTuiRoute.test.tsx"
+  },
+  "dependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@testing-library/react": "^16.3.0",
+    "@testing-library/user-event": "^14.6.1",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "jsdom": "^26.1.0",
+    "tsx": "^4.19.4",
+    "typescript": "^5.6.2"
+  }
+}

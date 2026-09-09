@@ -1,0 +1,1 @@
+{"instance": {"client": "acme", "release": "18", "environment": "local", "config_identity": "acme-local", "database": "acme", "http_port": 8069, "longpolling_port": 8072}}

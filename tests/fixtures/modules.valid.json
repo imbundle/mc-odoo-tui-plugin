@@ -1,0 +1,1 @@
+{"client": "acme", "modules": [{"name": "sale", "version": "18.0.1.0", "installed": true, "installable": true, "update_available": false, "dependencies": ["base"]}, {"name": "base", "version": "18.0.1.0", "installed": true, "installable": true, "update_available": false, "dependencies": []}]}
