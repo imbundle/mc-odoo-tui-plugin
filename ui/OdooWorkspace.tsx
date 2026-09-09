@@ -38,9 +38,9 @@ function statusDotClass(state?: RuntimeState): string {
   if (state === 'stopped') return 'bg-text-muted';
   return 'bg-warning animate-pulse';
 }
-function Panel({ testId, title, children }: { testId: string; title: string; children: React.ReactNode }) {
+function Panel({ testId, title, children, className = '' }: { testId: string; title: string; children: React.ReactNode; className?: string }) {
   return (
-    <section data-testid={testId} aria-labelledby={`${testId}-heading`} className="card box-border min-w-0 max-w-full overflow-visible rounded-[var(--control-radius)] border border-border bg-surface-raised p-3 sm:p-4">
+    <section data-testid={testId} aria-labelledby={`${testId}-heading`} className={`card box-border min-w-0 max-w-full overflow-visible rounded-[var(--control-radius)] border border-border bg-surface-raised p-3 sm:p-4 ${className}`}>
       <h2 id={`${testId}-heading`} className="text-sm font-semibold text-text">{title}</h2>
       {children}
     </section>
@@ -118,7 +118,7 @@ export function OdooWorkspace({
   const stopped = status?.state === 'stopped';
 
   return (
-    <main data-testid="odoo-tui-route" className="box-border flex h-full min-h-0 min-w-0 max-w-full flex-1 flex-col gap-4 overflow-x-hidden overflow-y-auto overscroll-contain p-3 text-text sm:gap-5 sm:p-5">
+    <main data-testid="odoo-tui-route" className="box-border flex h-full min-h-0 min-w-0 w-full max-w-full flex-1 flex-col gap-4 overflow-x-hidden overflow-y-auto overscroll-contain p-3 text-text sm:gap-5 sm:p-5 lg:overflow-y-hidden">
       {state !== 'ready' ? <StateNotice state={state} error={error} onRefresh={onRefresh} /> : null}
 
       <Panel testId="client-selection" title="Instance">
@@ -136,7 +136,7 @@ export function OdooWorkspace({
                 {(['client', 'database_manager'] as StartMode[]).map((mode) => <button key={mode} type="button" aria-pressed={startMode === mode} disabled={busy || state !== 'ready' || online} onClick={() => onStartModeChange(mode)} className={`h-9 min-h-[36px] min-w-0 flex-none whitespace-nowrap rounded-full px-3 text-xs font-medium leading-none transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 ${startMode === mode ? 'bg-accent text-white shadow-sm' : 'text-text-muted hover:bg-surface-raised/70 hover:text-text'} disabled:cursor-not-allowed disabled:opacity-50`}>{mode === 'client' ? 'Client' : 'Database Manager'}</button>)}
               </div>
             </div>
-            <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-border-subtle pt-2 text-xs">
+            <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-border-subtle pt-2 text-xs lg:hidden">
               <span><span className="text-text-muted">Odoo</span> <strong className="font-medium text-text">{identity?.release || selectedClient.release || '?'}</strong></span>
               <span data-testid="database-summary"><span className="text-text-muted">DB</span> <strong className="font-mono font-medium text-text">{confirmedDatabase[0]?.name || identity?.database || 'not confirmed'}</strong></span>
             </div>
@@ -161,21 +161,32 @@ export function OdooWorkspace({
         </div>
       </Panel>
 
-      <Panel testId="module-updates" title="Module updates">
-        <div className="mt-2 grid gap-1">
-          <label title="Update all installed modules" className={`box-border flex min-h-[44px] w-full min-w-0 max-w-full items-center gap-2 rounded-md border px-2.5 py-1 text-sm ${allModulesSelected ? 'border-transparent bg-surface' : 'border-border-subtle bg-surface'}`}><span className="flex min-w-0 items-center gap-2 font-semibold text-accent"><input type="checkbox" aria-label="Select all installed modules" checked={allModulesSelected} disabled={!eligible || busy || startMode !== 'client'} onChange={(event) => onAllToggle(event.target.checked)} className="h-5 w-5 shrink-0 accent-accent" /><span>ALL</span></span></label>
-          {modules.length === 0 ? <p className="py-1 text-sm text-text-muted">No client module catalogue is available.</p> : modules.map((module) => <label key={module.name} className={`box-border flex min-h-[44px] w-full min-w-0 max-w-full items-center justify-between gap-2 overflow-hidden rounded-md border px-2.5 py-1 text-sm transition-colors ${module.installed ? 'border-transparent bg-surface' : 'border-border-subtle bg-surface opacity-60 cursor-not-allowed'}`}><span className={`flex min-w-0 flex-1 items-center gap-2 overflow-hidden ${module.installed ? 'text-positive' : 'text-text-muted'}`}><input type="checkbox" aria-label={`Select module ${module.name}`} checked={selectedModules.has(module.name)} disabled={startMode !== 'client' || allModulesSelected || !module.installed || module.installable === false || busy} onChange={(event) => onModuleToggle(module.name, event.target.checked)} className="h-5 w-5 shrink-0 accent-accent" /><span className={`min-w-0 flex-1 truncate ${module.installed ? 'font-semibold' : 'font-medium'}`}>{module.name}</span></span><span className={`max-w-[40%] shrink text-right text-xs [overflow-wrap:anywhere] ${module.installed ? 'text-positive/80' : 'text-text-muted'}`}>{module.version || 'Version unknown'}</span></label>)}
-        </div>
-        {startMode !== 'client' ? <p className="mt-2 text-xs text-text-muted">Module updates are available only in Client mode.</p> : null}
-        {!eligible ? <p className="mt-2 text-xs text-text-muted">Module updates require a confirmed Client runtime and database.</p> : null}
-      </Panel>
+      <div data-testid="desktop-workspace-grid" className="grid min-w-0 w-full gap-4 lg:flex-1 lg:h-full lg:min-h-0 lg:grid-cols-[minmax(16rem,0.25fr)_minmax(0,0.75fr)] lg:grid-rows-[minmax(0,1fr)] lg:items-stretch">
+        <div data-testid="desktop-left-column" className="min-w-0 space-y-4 lg:flex lg:h-full lg:min-h-0 lg:flex-col">
+          <Panel testId="database-context" title="Database" className="hidden shrink-0 lg:block">
+            <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs">
+              <span><span className="text-text-muted">Odoo</span> <strong className="font-medium text-text">{identity?.release || selectedClient?.release || '?'}</strong></span>
+              <span data-testid="desktop-database-summary"><span className="text-text-muted">DB</span> <strong className="font-mono font-medium text-text">{confirmedDatabase[0]?.name || identity?.database || 'not confirmed'}</strong></span>
+            </div>
+          </Panel>
 
-      <Panel testId="odoo-logs" title="Odoo logs">
-        {!data.logs ? <p className="mt-3 text-sm text-text-muted">Odoo log is unavailable for this client.</p> : data.status?.state !== 'online' ? <p className="mt-3 text-sm text-text-muted">No Odoo log: this client is not running.</p> : data.logs.entries.length === 0 ? <p className="mt-3 text-sm text-text-muted">No Odoo log entries in the current window.</p> : <>
-          {showJumpToLatest ? <div className="mt-3 flex justify-end"><Button onClick={jumpToLatest} ariaLabel="Jump to latest Odoo log entry">Jump to latest</Button></div> : null}
-          <div ref={logViewportRef} data-testid="odoo-log-viewport" aria-label="Odoo log entries" onScroll={handleLogScroll} className="mt-3 min-h-[10rem] max-h-[min(28rem,calc(100dvh-12rem))] min-w-0 overflow-y-auto overscroll-contain pr-1"><div className="grid gap-2">{data.logs.entries.map((entry, index) => <article key={`${entry.timestamp ?? 'unknown'}-${entry.pid ?? 'nopid'}-${index}`} className="box-border min-w-0 max-w-full rounded-lg border border-border-subtle p-3 overflow-hidden"><div className="flex flex-wrap items-center gap-2 text-xs text-text-muted">{entry.timestamp ? <time className="max-w-full break-all" dateTime={entry.timestamp}>{entry.timestamp}</time> : <span>timestamp unavailable</span>}<span className={`rounded-full border px-2 py-1 ${entry.level === 'ERROR' || entry.level === 'CRITICAL' ? 'border-negative text-negative' : entry.level === 'WARNING' ? 'border-warning text-warning' : 'border-accent text-accent'}`}>{entry.level ?? 'INFO'}</span>{entry.pid != null ? <span>PID {entry.pid}</span> : null}{entry.database ? <span className="font-mono">{entry.database}</span> : null}{entry.logger ? <span className="font-mono">{entry.logger}</span> : null}</div><p className="mt-2 whitespace-pre-wrap break-words font-mono text-xs leading-relaxed text-text">{entry.message}</p></article>)}</div></div>
-        </>}
-      </Panel>
+          <Panel testId="module-updates" title="Module updates" className="lg:flex lg:min-h-0 lg:flex-1 lg:flex-col">
+            <div data-testid="module-list" className="mt-2 grid min-h-0 gap-1 lg:flex-1 lg:overflow-y-auto lg:pr-1">
+              <label title="Update all installed modules" className={`box-border flex min-h-[44px] w-full min-w-0 max-w-full items-center gap-2 rounded-md border px-2.5 py-1 text-sm ${allModulesSelected ? 'border-transparent bg-surface' : 'border-border-subtle bg-surface'}`}><span className="flex min-w-0 items-center gap-2 font-semibold text-accent"><input type="checkbox" aria-label="Select all installed modules" checked={allModulesSelected} disabled={!eligible || busy || startMode !== 'client'} onChange={(event) => onAllToggle(event.target.checked)} className="h-5 w-5 shrink-0 accent-accent" /><span>ALL</span></span></label>
+              {modules.length === 0 ? <p className="py-1 text-sm text-text-muted">No client module catalogue is available.</p> : modules.map((module) => <label key={module.name} className={`box-border flex min-h-[44px] w-full min-w-0 max-w-full items-center justify-between gap-2 overflow-hidden rounded-md border px-2.5 py-1 text-sm transition-colors ${module.installed ? 'border-transparent bg-surface' : 'border-border-subtle bg-surface opacity-60 cursor-not-allowed'}`}><span className={`flex min-w-0 flex-1 items-center gap-2 overflow-hidden ${module.installed ? 'text-positive' : 'text-text-muted'}`}><input type="checkbox" aria-label={`Select module ${module.name}`} checked={selectedModules.has(module.name)} disabled={startMode !== 'client' || allModulesSelected || !module.installed || module.installable === false || busy} onChange={(event) => onModuleToggle(module.name, event.target.checked)} className="h-5 w-5 shrink-0 accent-accent" /><span className={`min-w-0 flex-1 truncate ${module.installed ? 'font-semibold' : 'font-medium'}`}>{module.name}</span></span><span className={`max-w-[40%] shrink text-right text-xs [overflow-wrap:anywhere] ${module.installed ? 'text-positive/80' : 'text-text-muted'}`}>{module.version || 'Version unknown'}</span></label>)}
+            </div>
+            {startMode !== 'client' ? <p className="mt-2 text-xs text-text-muted">Module updates are available only in Client mode.</p> : null}
+            {!eligible ? <p className="mt-2 text-xs text-text-muted">Module updates require a confirmed Client runtime and database.</p> : null}
+          </Panel>
+        </div>
+
+        <Panel testId="odoo-logs" title="Odoo logs" className="min-w-0 w-full lg:flex lg:h-full lg:min-h-0 lg:flex-col">
+          {!data.logs ? <p className="mt-3 text-sm text-text-muted">Odoo log is unavailable for this client.</p> : data.status?.state !== 'online' ? <p className="mt-3 text-sm text-text-muted">No Odoo log: this client is not running.</p> : data.logs.entries.length === 0 ? <p className="mt-3 text-sm text-text-muted">No Odoo log entries in the current window.</p> : <>
+            {showJumpToLatest ? <div className="mt-3 flex justify-end"><Button onClick={jumpToLatest} ariaLabel="Jump to latest Odoo log entry">Jump to latest</Button></div> : null}
+            <div ref={logViewportRef} data-testid="odoo-log-viewport" aria-label="Odoo log entries" onScroll={handleLogScroll} className="mt-3 min-h-[10rem] max-h-[min(28rem,calc(100dvh-12rem))] lg:max-h-none lg:flex-1 lg:min-h-0 min-w-0 overflow-y-auto overscroll-contain pr-1"><div className="grid gap-2">{data.logs.entries.map((entry, index) => <article key={`${entry.timestamp ?? 'unknown'}-${entry.pid ?? 'nopid'}-${index}`} className="box-border min-w-0 max-w-full rounded-lg border border-border-subtle p-3 overflow-hidden"><div className="flex flex-wrap items-center gap-2 text-xs text-text-muted">{entry.timestamp ? <time className="max-w-full break-all" dateTime={entry.timestamp}>{entry.timestamp}</time> : <span>timestamp unavailable</span>}<span className={`rounded-full border px-2 py-1 ${entry.level === 'ERROR' || entry.level === 'CRITICAL' ? 'border-negative text-negative' : entry.level === 'WARNING' ? 'border-warning text-warning' : 'border-accent text-accent'}`}>{entry.level ?? 'INFO'}</span>{entry.pid != null ? <span>PID {entry.pid}</span> : null}{entry.database ? <span className="font-mono">{entry.database}</span> : null}{entry.logger ? <span className="font-mono">{entry.logger}</span> : null}</div><p className="mt-2 whitespace-pre-wrap break-words font-mono text-xs leading-relaxed text-text">{entry.message}</p></article>)}</div></div>
+          </>}
+        </Panel>
+      </div>
 
       {(operationMessage || busy) ? <section data-testid="operation-result" aria-live="polite" role={operationMessage ? 'status' : undefined} className="min-h-[44px] rounded-xl border border-border bg-surface px-4 py-3 text-sm text-text">{operationMessage || 'Operation in progress…'}</section> : null}
     </main>
