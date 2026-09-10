@@ -69,6 +69,10 @@ export function OdooTuiRoute({ api: suppliedApi }: OdooTuiRouteProps) {
       if (databases.status === 'fulfilled') next.databases = databases.value.databases;
       if (logs.status === 'fulfilled') next.logs = logs.value;
       setData(next);
+      if (modules.status === 'fulfilled') {
+        const selectableModuleNames = new Set(modules.value.modules.filter((module) => module.installed && module.installable !== false).map((module) => module.name));
+        setSelectedModules((current) => new Set([...current].filter((name) => selectableModuleNames.has(name))));
+      }
       const reportedMode: StartMode = control.status === 'fulfilled' && control.value.control.control_mode === 'database_manager' ? 'database_manager' : 'client';
       if (!modeByClient.current[query]) modeByClient.current[query] = reportedMode;
       setStartMode(modeByClient.current[query]);
@@ -143,11 +147,13 @@ export function OdooTuiRoute({ api: suppliedApi }: OdooTuiRouteProps) {
   const openLifecycle = useCallback((operation: LifecycleOperation, _initiator: HTMLElement) => {
     const client = data.selectedClient;
     if (!client || !eligible) return;
+    const selectableModuleNames = new Set((data.modules ?? []).filter((module) => module.installed && module.installable !== false).map((module) => module.name));
+    const currentSelectedModules = [...selectedModules].filter((name) => selectableModuleNames.has(name));
     const selector = operation === 'restart'
       ? allModulesSelected
         ? { update_all: true as const }
-        : selectedModules.size > 0
-          ? { modules: [...selectedModules] }
+        : currentSelectedModules.length > 0
+          ? { modules: currentSelectedModules }
           : undefined
       : undefined;
     setOperationPhase('applying');
@@ -173,7 +179,7 @@ export function OdooTuiRoute({ api: suppliedApi }: OdooTuiRouteProps) {
         setOperationPhase('idle');
       }
     })();
-  }, [allModulesSelected, api, data.selectedClient, eligible, refresh, selectedModules, startMode]);
+  }, [allModulesSelected, api, data.modules, data.selectedClient, eligible, refresh, selectedModules, startMode]);
 
   const workspaceData = { ...data, identity: data.identity, status: data.status, control: data.control };
   return (

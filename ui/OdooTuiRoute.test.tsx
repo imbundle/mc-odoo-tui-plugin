@@ -119,7 +119,7 @@ await waitFor(() => { if (!calls.includes('restart:{"modules":["base"]}')) throw
 await user.click(screen.getByRole('checkbox', { name: 'Select all installed modules' }));
 if (!(screen.getByRole('checkbox', { name: 'Select all installed modules' }) as HTMLInputElement).checked) throw new Error('ALL must be selected');
 const allRow = view.container.querySelector('label[title="Update all installed modules"]');
-if (!allRow?.className.includes('border-transparent') || allRow.className.includes('border-accent') || !allRow.className.includes('bg-surface') || allRow.className.includes('bg-accent-subtle')) throw new Error('ALL row must keep the dark surface without a purple border or background');
+if (!allRow?.className.includes('border-accent/50') || !allRow.className.includes('bg-accent-subtle')) throw new Error('ALL row must visibly indicate its selected state');
 if ((screen.getByRole('checkbox', { name: 'Select module base' }) as HTMLInputElement).checked) throw new Error('individual modules must clear when ALL is selected');
 if (!(screen.getByRole('checkbox', { name: 'Select module base' }) as HTMLInputElement).disabled) throw new Error('individual modules must be disabled when ALL is selected');
 await user.click(screen.getByRole('button', { name: 'Restart' }));
