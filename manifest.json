@@ -1,6 +1,6 @@
 {
   "id": "odoo-tui",
-  "name": "Odoo TUI",
+  "name": "odoo",
   "description": "Mission Control workspace for confirmed Odoo client and runtime state.",
   "version": "0.1.0",
   "enabled": true,
