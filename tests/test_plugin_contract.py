@@ -63,6 +63,12 @@ def test_host_loader_resolves_static_routes_and_rejects_missing_client(tmp_path)
     (external_dir / "odoo-tui").symlink_to(ROOT, target_is_directory=True)
     loader = loader_module.PluginLoader(internal_dir=tmp_path / "empty", external_dir=external_dir)
     assert loader.load_plugin("odoo-tui") is True
+    plugin_module = loader.get_module("odoo-tui")
+    assert plugin_module is not None
+    plugin_handlers = plugin_module.handlers
+    plugin_log_polling = importlib.import_module(f"{plugin_module.__name__}.log_polling")
+    plugin_config = importlib.import_module(f"{plugin_module.__name__}.config")
+    plugin_operation_bridge = importlib.import_module(f"{plugin_module.__name__}.operation_bridge")
 
     manifest = json.loads((ROOT / "manifest.json").read_text(encoding="utf-8"))
     for endpoint in manifest["endpoints"]:
@@ -70,7 +76,7 @@ def test_host_loader_resolves_static_routes_and_rejects_missing_client(tmp_path)
         assert handler is not None
         if "/instance/" not in endpoint["path"]:
             continue
-        with pytest.raises((PollingError, handlers.ConfigurationError)) as error:
+        with pytest.raises((plugin_log_polling.PollingError, plugin_config.ConfigurationError)) as error:
             handler.handler_fn({}, {}, {"authenticated": True, "authorized": True})
         assert error.value.status_code == 400
         assert error.value.code == "INVALID_REQUEST"
@@ -82,13 +88,24 @@ def test_host_loader_resolves_static_routes_and_rejects_missing_client(tmp_path)
             return {"instance": {"client": "known", "release": "19", "environment": "local", "config_identity": None,
                                   "database": None, "http_port": None, "longpolling_port": None}}
 
-    handlers.register_read_adapter(OdooTuiAdapter(KnownClientTransport()))
+    plugin_handlers.register_read_adapter(plugin_handlers.OdooTuiAdapter(KnownClientTransport()))
     unknown_handler = loader.resolve("GET", "/odoo-tui/instance/identity")
     assert unknown_handler is not None
-    with pytest.raises(PollingError) as error:
+    with pytest.raises(plugin_log_polling.PollingError) as error:
         unknown_handler.handler_fn({}, {"client": "unknown"}, {"authenticated": True})
     assert (error.value.status_code, error.value.code) == (404, "INSTANCE_NOT_FOUND")
-    handlers.clear_read_adapter()
+    class FailingBoundary:
+        def invoke(self, request):
+            raise plugin_operation_bridge.BridgeError("PRECONDITION_FAILED", "operation precondition was not met")
+
+    plugin_handlers.register_operation_boundary(FailingBoundary())
+    restart_handler = loader.resolve("POST", "/odoo-tui/instance/restart")
+    assert restart_handler is not None
+    with pytest.raises(plugin_log_polling.PollingError) as error:
+        restart_handler.handler_fn({"confirmation": "RESTART known", "mode": "client"}, {"client": "known"}, {"authenticated": True, "authorized": True})
+    assert (error.value.status_code, error.value.code) == (409, "PRECONDITION_FAILED")
+    plugin_handlers.clear_operation_boundary()
+    plugin_handlers.clear_read_adapter()
 
 
 def test_log_endpoint_rejects_missing_authentication():

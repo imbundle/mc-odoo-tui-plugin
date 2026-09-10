@@ -10,10 +10,16 @@ from collections.abc import Mapping
 from dataclasses import asdict
 from typing import Any
 
-from adapters.odoo_tui_adapter import AdapterError, OdooTuiAdapter
-from config import ConfigurationError, ConfigurationSource, change_mode as config_change_mode, get_config, read_mode as config_read_mode, register_config
-from log_polling import LogPoller, PollingError
-from module_update_planning import ModulePlanningError, create_update_plan, plan_module_updates, plan_updates
+if __package__:
+    from .adapters.odoo_tui_adapter import AdapterError, OdooTuiAdapter
+    from .config import ConfigurationError, ConfigurationSource, change_mode as config_change_mode, get_config, read_mode as config_read_mode, register_config
+    from .log_polling import LogPoller, PollingError
+    from .module_update_planning import ModulePlanningError, create_update_plan, plan_module_updates, plan_updates
+else:
+    from adapters.odoo_tui_adapter import AdapterError, OdooTuiAdapter
+    from config import ConfigurationError, ConfigurationSource, change_mode as config_change_mode, get_config, read_mode as config_read_mode, register_config
+    from log_polling import LogPoller, PollingError
+    from module_update_planning import ModulePlanningError, create_update_plan, plan_module_updates, plan_updates
 
 
 _sources: dict[str, Path] = {}
@@ -82,7 +88,10 @@ def clear_operation_boundary() -> None:
 def _operation_model_boundary() -> Any:
     global _operation_boundary
     if _operation_boundary is None:
-        from operation_bridge import OperationBridge, OperationBridgeConfig
+        if __package__:
+            from .operation_bridge import OperationBridge, OperationBridgeConfig
+        else:
+            from operation_bridge import OperationBridge, OperationBridgeConfig
         _operation_boundary = OperationBridge(OperationBridgeConfig())
     return _operation_boundary
 
@@ -216,7 +225,10 @@ def register_config_source(client: str, source: ConfigurationSource) -> None:
 
 
 def clear_config_sources() -> None:
-    from config import clear_configs
+    if __package__:
+        from .config import clear_configs
+    else:
+        from config import clear_configs
     clear_configs()
 
 

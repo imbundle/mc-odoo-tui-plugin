@@ -40,9 +40,12 @@ def dispatch_loader(tmp_path):
     loader = loader_module.PluginLoader(internal_dir=tmp_path / "empty", external_dir=external_dir)
     assert loader.load_plugin("odoo-tui") is True
     loader_module._loader = loader
-    handlers.register_read_adapter(OdooTuiAdapter(FixtureTransport()))
+    plugin_module = loader.get_module("odoo-tui")
+    assert plugin_module is not None
+    loader_module._odoo_handlers = plugin_module.handlers
+    loader_module._odoo_handlers.register_read_adapter(loader_module._odoo_handlers.OdooTuiAdapter(FixtureTransport()))
     yield loader_module
-    handlers.clear_read_adapter()
+    loader_module._odoo_handlers.clear_read_adapter()
     loader_module._loader = None
 
 
@@ -104,7 +107,7 @@ def test_local_dispatch_maps_malformed_stale_and_unavailable_read_errors(dispatc
                 return (FIXTURES / "malformed.json.txt").read_text(encoding="utf-8")
             return super().request(operation, **params)
 
-    handlers.register_read_adapter(OdooTuiAdapter(ErrorTransport()))
+    dispatch_loader._odoo_handlers.register_read_adapter(dispatch_loader._odoo_handlers.OdooTuiAdapter(ErrorTransport()))
     checks = [
         ("/odoo-tui/instance/identity", "STALE_INSTANCE_IDENTITY", 404),
         ("/odoo-tui/instance/status", "STATUS_PROBE_FAILED", 503),
@@ -126,7 +129,7 @@ def test_client_registry_failure_is_translated_through_dispatch(dispatch_loader)
                 return (FIXTURES / "databases.unavailable.json").read_text(encoding="utf-8")
             return super().request(operation, **params)
 
-    handlers.register_read_adapter(OdooTuiAdapter(UnavailableTransport()))
+    dispatch_loader._odoo_handlers.register_read_adapter(dispatch_loader._odoo_handlers.OdooTuiAdapter(UnavailableTransport()))
     handled, response, status = dispatch_loader.dispatch_plugin_request(
         "GET", "/api/local/odoo-tui/instance/status", {}, {"client": ["acme"]}, AUTH
     )
@@ -173,7 +176,7 @@ def test_unknown_and_stale_instance_error_mapping(dispatch_loader):
                 return {"clients": [{"name": "known", "release": "19", "environment": "local", "local_url": None}]}
             return {"instance": {"client": "other", "release": "19", "environment": "local", "config_identity": None,
                                   "database": None, "http_port": None, "longpolling_port": None}}
-    handlers.register_read_adapter(OdooTuiAdapter(Transport()))
+    dispatch_loader._odoo_handlers.register_read_adapter(dispatch_loader._odoo_handlers.OdooTuiAdapter(Transport()))
     _, unknown, unknown_status = dispatch_loader.dispatch_plugin_request("GET", "/api/local/odoo-tui/instance/identity", {}, {"client": ["missing"]}, AUTH)
     assert unknown_status == 404 and unknown["error"] == "INSTANCE_NOT_FOUND"
     _, stale, stale_status = dispatch_loader.dispatch_plugin_request("GET", "/api/local/odoo-tui/instance/identity", {}, {"client": ["known"]}, AUTH)

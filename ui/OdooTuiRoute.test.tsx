@@ -80,16 +80,12 @@ const desktopGrid = view.container.querySelector('[data-testid="desktop-workspac
 if (!desktopGrid?.className.includes('xl:grid-cols-[minmax(16rem,0.25fr)_minmax(0,0.75fr)]') || !desktopGrid.className.includes('w-full')) throw new Error('desktop workspace must give the log column most of the width and fill its parent');
 if (view.container.querySelector('[data-testid="client-selection"]')?.nextElementSibling !== desktopGrid) throw new Error('Instance must remain above the desktop workspace grid');
 const desktopLeft = desktopGrid.querySelector('[data-testid="desktop-left-column"]');
-if (!desktopLeft?.querySelector('[data-testid="database-context"]')) throw new Error('desktop database context must be in the left column');
 if (!desktopLeft?.querySelector('[data-testid="module-updates"]')) throw new Error('desktop module list must be in the left column');
 if (desktopGrid.querySelector('[data-testid="odoo-logs"]')?.parentElement !== desktopGrid) throw new Error('desktop logs must occupy the right grid column');
-const desktopDatabaseContext = desktopGrid.querySelector('[data-testid="database-context"]');
-if (!desktopDatabaseContext?.className.includes('hidden') || !desktopDatabaseContext.className.includes('xl:block')) throw new Error('desktop database context must stay hidden on mobile');
-if (!view.container.querySelector('[data-testid="client-selection"] [data-testid="database-summary"]')?.parentElement?.className.includes('xl:hidden')) throw new Error('mobile database summary must remain inside Instance');
+if (desktopGrid.querySelector('[data-testid="database-context"]')) throw new Error('database context must be merged into Instance');
+if (!view.container.querySelector('[data-testid="client-selection"] [data-testid="database-summary"]')) throw new Error('database summary must remain inside Instance');
 if (!view.container.querySelector('[data-testid="desktop-workspace-grid"]')?.className.includes('xl:flex-1') || !view.container.querySelector('[data-testid="desktop-workspace-grid"]')?.className.includes('xl:min-h-0')) throw new Error('desktop workspace must consume only the remaining height');
 if (!desktopLeft?.className.includes('xl:h-full') || !desktopLeft.className.includes('xl:flex-col') || !desktopLeft.className.includes('xl:min-h-0')) throw new Error('desktop left area must fill the grid row without owning page scroll');
-const desktopDatabase = desktopGrid.querySelector('[data-testid="database-context"]');
-if (!desktopDatabase?.className.includes('shrink-0')) throw new Error('desktop database context must keep its fixed content height');
 const modulePanel = desktopGrid.querySelector('[data-testid="module-updates"]');
 if (!modulePanel?.className.includes('xl:flex-1') || !modulePanel.className.includes('xl:flex-col') || !modulePanel.className.includes('xl:min-h-0')) throw new Error('desktop module area must consume the remaining left-column height');
 if (!view.container.querySelector('[data-testid="module-list"]')?.className.includes('xl:flex-1') || !view.container.querySelector('[data-testid="module-list"]')?.className.includes('xl:overflow-y-auto')) throw new Error('desktop module list must own the internal scroll');

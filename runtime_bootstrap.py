@@ -3,8 +3,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 from threading import Lock
-from adapters.odoo_tui_adapter import OdooTuiAdapter
-from worker_bridge import OdooTuiWorkerBridge, WorkerConfig, BridgeError
+if __package__:
+    from .adapters.odoo_tui_adapter import OdooTuiAdapter
+    from .worker_bridge import OdooTuiWorkerBridge, WorkerConfig, BridgeError
+else:
+    from adapters.odoo_tui_adapter import OdooTuiAdapter
+    from worker_bridge import OdooTuiWorkerBridge, WorkerConfig, BridgeError
 
 CONFIG_PATH = Path("/home/cyclone/Developer/ODOO/runtime/tools/odoo-tui/config/odoo-tui.yaml")
 INTERPRETER_PATH = Path("/home/cyclone/Developer/ODOO/runtime/tools/odoo-tui/.venv/bin/python3")

@@ -6,9 +6,13 @@ import re
 import time
 from typing import Any, TypeAlias, TypedDict
 
-import handlers
-from log_polling import PollingError
-import runtime_bootstrap
+if __package__:
+    from . import handlers, runtime_bootstrap
+    from .log_polling import PollingError
+else:
+    import handlers
+    import runtime_bootstrap
+    from log_polling import PollingError
 
 RequestBody: TypeAlias = dict[str, Any]
 QueryParams: TypeAlias = Mapping[str, object]
@@ -196,7 +200,7 @@ def _invoke_operation(request: dict[str, Any]) -> dict[str, Any]:
         try:
             response = handlers._operation_model_boundary().invoke(request)
         except Exception as error:
-            if error.__class__.__module__ == "operation_bridge" and hasattr(error, "code"):
+            if isinstance(getattr(error, "code", None), str) and isinstance(getattr(error, "message", None), str):
                 _operation_error(error)
             raise PollingError(503, "OPERATION_UNAVAILABLE", "operation bridge is unavailable") from None
         if not isinstance(response, Mapping) or set(response) != {"protocol_version", "operation", "ok", "data"} or response.get("ok") is not True or not isinstance(response.get("data"), dict):

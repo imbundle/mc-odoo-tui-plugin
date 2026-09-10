@@ -11,7 +11,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from operation_worker import ProtocolError, validate_request
+if __package__:
+    from .operation_worker import ProtocolError, validate_request
+else:
+    from operation_worker import ProtocolError, validate_request
 
 _DEFAULT_INTERPRETER = Path("/home/cyclone/Developer/ODOO/runtime/tools/odoo-tui/.venv/bin/python3")
 _DEFAULT_WORKER = Path(__file__).with_name("operation_worker.py")

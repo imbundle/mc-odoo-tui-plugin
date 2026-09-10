@@ -3,7 +3,10 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from typing import Any, Mapping, Protocol
-from worker_bridge import BridgeError, OdooTuiWorkerBridge, WorkerConfig
+if __package__ and "." in __package__:
+    from ..worker_bridge import BridgeError, OdooTuiWorkerBridge, WorkerConfig
+else:
+    from worker_bridge import BridgeError, OdooTuiWorkerBridge, WorkerConfig
 
 class ReadOnlyTransport(Protocol):
     def request(self, operation: str, **params: str) -> str | bytes | Mapping[str, Any]: ...

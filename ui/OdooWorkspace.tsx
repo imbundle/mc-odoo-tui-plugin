@@ -136,7 +136,7 @@ export function OdooWorkspace({
                 {(['client', 'database_manager'] as StartMode[]).map((mode) => <button key={mode} type="button" aria-pressed={startMode === mode} disabled={busy || state !== 'ready' || online} onClick={() => onStartModeChange(mode)} className={`h-9 min-h-[36px] min-w-0 flex-none whitespace-nowrap rounded-full px-3 text-xs font-medium leading-none transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 ${startMode === mode ? 'bg-accent text-white shadow-sm' : 'text-text-muted hover:bg-surface-raised/70 hover:text-text'} disabled:cursor-not-allowed disabled:opacity-50`}>{mode === 'client' ? 'Client' : 'Database Manager'}</button>)}
               </div>
             </div>
-            <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-border-subtle pt-2 text-xs xl:hidden">
+            <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-border-subtle pt-2 text-xs">
               <span><span className="text-text-muted">Odoo</span> <strong className="font-medium text-text">{identity?.release || selectedClient.release || '?'}</strong></span>
               <span data-testid="database-summary"><span className="text-text-muted">DB</span> <strong className="font-mono font-medium text-text">{confirmedDatabase[0]?.name || identity?.database || 'not confirmed'}</strong></span>
             </div>
@@ -163,13 +163,6 @@ export function OdooWorkspace({
 
       <div data-testid="desktop-workspace-grid" className="grid min-w-0 w-full gap-4 xl:flex-1 xl:h-full xl:min-h-0 xl:grid-cols-[minmax(16rem,0.25fr)_minmax(0,0.75fr)] xl:grid-rows-[minmax(0,1fr)] xl:items-stretch">
         <div data-testid="desktop-left-column" className="min-w-0 space-y-4 xl:flex xl:h-full xl:min-h-0 xl:flex-col">
-          <Panel testId="database-context" title="Database" className="hidden shrink-0 xl:block">
-            <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs">
-              <span><span className="text-text-muted">Odoo</span> <strong className="font-medium text-text">{identity?.release || selectedClient?.release || '?'}</strong></span>
-              <span data-testid="desktop-database-summary"><span className="text-text-muted">DB</span> <strong className="font-mono font-medium text-text">{confirmedDatabase[0]?.name || identity?.database || 'not confirmed'}</strong></span>
-            </div>
-          </Panel>
-
           <Panel testId="module-updates" title="Module updates" className="xl:flex xl:min-h-0 xl:flex-1 xl:flex-col">
             <div data-testid="module-list" className="mt-2 grid min-h-0 gap-1 xl:flex-1 xl:overflow-y-auto xl:pr-1">
               <label title="Update all installed modules" className={`box-border flex min-h-[44px] w-full min-w-0 max-w-full items-center gap-2 rounded-md border px-2.5 py-1 text-sm ${allModulesSelected ? 'border-transparent bg-surface' : 'border-border-subtle bg-surface'}`}><span className="flex min-w-0 items-center gap-2 font-semibold text-accent"><input type="checkbox" aria-label="Select all installed modules" checked={allModulesSelected} disabled={!eligible || busy || startMode !== 'client'} onChange={(event) => onAllToggle(event.target.checked)} className="h-5 w-5 shrink-0 accent-accent" /><span>ALL</span></span></label>
