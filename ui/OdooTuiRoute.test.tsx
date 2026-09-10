@@ -59,10 +59,11 @@ if (!screen.getByRole('button', { name: 'Client' })) throw new Error('Client sta
 if (!screen.getByRole('button', { name: 'Database Manager' })) throw new Error('Database Manager start mode is missing');
 if (screen.queryByText('Start as')) throw new Error('start mode label is redundant');
 if (screen.queryByText(/Mode:/)) throw new Error('mode summary is redundant');
-if (!screen.getByRole('button', { name: 'Client' }).className.includes('bg-accent')) throw new Error('selected mode must be visibly highlighted');
+if (!screen.getByRole('button', { name: 'Client' }).className.includes('nav-link-active')) throw new Error('selected mode must be visibly highlighted');
 if (screen.getByRole('button', { name: 'Client' }).className.includes('border-accent')) throw new Error('selected mode must not create a second inner border');
+if (!screen.getByRole('button', { name: 'Client' }).querySelector('svg') || !screen.getByRole('button', { name: 'Database Manager' }).querySelector('svg')) throw new Error('mode buttons must render icons');
 if (!view.container.querySelector('#odoo-client-selector')?.className.includes('h-11')) throw new Error('client selector height is not normalized');
-if (!view.container.querySelector('[aria-label="Start mode"]')?.className.includes('h-11')) throw new Error('start mode height is not normalized');
+if (!view.container.querySelector('[aria-label="Start mode"] button')?.className.includes('pill pill-button')) throw new Error('start mode buttons must use the host pill pattern');
 if (!screen.getByRole('checkbox', { name: 'Select all installed modules' })) throw new Error('ALL module selector is missing');
 if (!view.container.querySelector('label[title="Update all installed modules"] > span')?.className.includes('text-accent')) throw new Error('ALL must use accent purple text');
 if (screen.queryByText('All installed')) throw new Error('ALL selector must not use an overflowing text label');
@@ -71,6 +72,7 @@ const logViewport = view.container.querySelector('[data-testid="odoo-log-viewpor
 if (!logViewport || !logViewport.className.includes('overflow-y-auto')) throw new Error('Odoo log viewport must scroll');
 if (!logViewport.className.includes('100dvh')) throw new Error('Odoo log viewport must use responsive viewport height');
 if (!view.container.querySelector('main[data-testid="odoo-tui-route"]')?.className.includes('h-full')) throw new Error('workspace must own page scrolling');
+if (!view.container.querySelector('main[data-testid="odoo-tui-route"]')?.className.includes('p-0')) throw new Error('workspace must rely on the host route-stage outer padding');
 if (!view.container.querySelector('main[data-testid="odoo-tui-route"]')?.className.includes('overflow-x-hidden')) throw new Error('workspace must contain horizontal overflow');
 const allModulesRow = view.container.querySelector('label[title="Update all installed modules"]');
 if (!allModulesRow?.className.includes('max-w-full') || !allModulesRow.className.includes('w-full')) throw new Error('ALL row must fit the available width');
@@ -147,6 +149,7 @@ if ((screen.getByRole('button', { name: 'Start' }) as HTMLButtonElement).disable
 if (!(screen.getByRole('button', { name: 'Stop' }) as HTMLButtonElement).disabled) throw new Error('Stop must be disabled while stopped');
 await user.click(screen.getByRole('button', { name: 'Database Manager' }));
 if (!(screen.getByRole('button', { name: 'Database Manager' }) as HTMLButtonElement).getAttribute('aria-pressed') || !(screen.getByRole('button', { name: 'Database Manager' }) as HTMLButtonElement).getAttribute('aria-pressed')!.includes('true')) throw new Error('Database Manager mode was not selected');
+if ((screen.getByRole('button', { name: 'Client' }) as HTMLButtonElement).getAttribute('aria-pressed') !== 'false') throw new Error('Client mode must be deselected when Database Manager is selected');
 if (!(screen.getByRole('checkbox', { name: 'Select module base' }) as HTMLInputElement).disabled) throw new Error('modules must be disabled in Database Manager mode');
 await user.click(screen.getByRole('button', { name: 'Start' }));
 await waitFor(() => { if (!startModes.includes('database_manager')) throw new Error('selected start mode was not sent'); });

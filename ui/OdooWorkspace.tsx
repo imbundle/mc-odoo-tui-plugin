@@ -1,5 +1,5 @@
 import React from 'react';
-import { Activity, ChevronDown, Play, RefreshCw, RotateCcw, Square } from 'lucide-react';
+import { Activity, ChevronDown, Database as DatabaseIcon, GitBranch, ListTree, Play, RefreshCw, RotateCcw, Server, Square } from 'lucide-react';
 import { Button } from './Button';
 import type { OdooClient, OdooControl, OdooDatabase, OdooIdentity, OdooModule, OdooStatus, OdooWorkspaceData, RuntimeState, StartMode } from './types';
 
@@ -118,7 +118,7 @@ export function OdooWorkspace({
   const stopped = status?.state === 'stopped';
 
   return (
-    <main data-testid="odoo-tui-route" className="box-border flex h-full min-h-0 min-w-0 w-full max-w-full flex-1 flex-col gap-4 overflow-x-hidden overflow-y-auto overscroll-contain p-3 text-text sm:gap-5 sm:p-5 xl:overflow-y-hidden">
+    <main data-testid="odoo-tui-route" className="box-border flex h-full min-h-0 min-w-0 w-full max-w-full flex-1 flex-col gap-4 overflow-x-hidden overflow-y-auto overscroll-contain p-0 text-text sm:gap-5 xl:overflow-y-hidden">
       {state !== 'ready' ? <StateNotice state={state} error={error} onRefresh={onRefresh} /> : null}
 
       <Panel testId="client-selection" title="Instance">
@@ -132,33 +132,37 @@ export function OdooWorkspace({
                   {data.clients.map((client) => { const clientState = clientStatuses[client.name] ?? (client.name === data.selectedClient ? status?.state : undefined); return <button key={client.name} type="button" role="option" aria-selected={client.name === data.selectedClient} onClick={() => { onClientChange(client.name); setClientListOpen(false); }} className={`flex min-h-[44px] w-full min-w-0 items-center gap-2 rounded-md px-2.5 py-1.5 text-left transition-colors hover:bg-surface ${client.name === data.selectedClient ? 'bg-accent-subtle' : ''}`}><span aria-hidden="true" className={`inline-block h-2.5 w-2.5 shrink-0 rounded-full ${statusDotClass(clientState)}`} /><span className="min-w-0 flex-1 truncate text-sm text-text">{client.name}</span><span className="shrink-0 text-xs text-text-muted">{stateLabel(clientState)}</span></button>; })}
                 </div> : null}
               </div>
-              <div role="group" aria-label="Start mode" className="inline-flex h-11 min-h-11 w-fit max-w-full flex-none items-center gap-1 overflow-hidden rounded-full bg-surface-sunken p-1">
-                {(['client', 'database_manager'] as StartMode[]).map((mode) => <button key={mode} type="button" aria-pressed={startMode === mode} disabled={busy || state !== 'ready' || online} onClick={() => onStartModeChange(mode)} className={`h-9 min-h-[36px] min-w-0 flex-none whitespace-nowrap rounded-full px-3 text-xs font-medium leading-none transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 ${startMode === mode ? 'bg-accent text-white shadow-sm' : 'text-text-muted hover:bg-surface-raised/70 hover:text-text'} disabled:cursor-not-allowed disabled:opacity-50`}>{mode === 'client' ? 'Client' : 'Database Manager'}</button>)}
+            </div>
+            <div className="mt-3 grid min-w-0 gap-3 xl:grid-cols-[minmax(0,1fr)_auto_auto] xl:items-start">
+              <div data-testid="instance-info" className="order-2 min-w-0 border-t border-border-subtle pt-2 text-xs xl:order-1 xl:border-t-0 xl:pt-0">
+                <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-surface-sunken px-2 py-1"><Server aria-hidden="true" className="h-3.5 w-3.5 text-text-muted" /><span className="text-text-muted">Odoo</span> <strong className="font-medium text-text">{identity?.release || selectedClient?.release || '?'}</strong></span>
+                  <span data-testid="database-summary" className="inline-flex items-center gap-1.5 rounded-full bg-surface-sunken px-2 py-1"><DatabaseIcon aria-hidden="true" className="h-3.5 w-3.5 text-text-muted" /><span className="text-text-muted">DB</span> <strong className="font-mono font-medium text-text">{confirmedDatabase[0]?.name || identity?.database || 'not confirmed'}</strong></span>
+                  <span data-testid="runtime-status" className="flex min-w-0 items-center gap-2 rounded-full border border-border-subtle bg-surface-sunken px-2 py-1" aria-label="Runtime status">
+                    <span data-testid="runtime-status-dot" role="img" aria-label={stateLabel(status?.state)} title={stateLabel(status?.state)} className={`inline-block h-3 w-3 shrink-0 rounded-full border border-border-subtle ${statusDotClass(status?.state)}`} />
+                    <span className="min-w-0 truncate text-text-muted">{status?.process_name || 'Process identity unavailable'}</span>
+                    {status?.pid != null ? <span className="shrink-0 text-text-muted">PID {status.pid}</span> : null}
+                    {status?.pm2_id != null ? <span className="shrink-0 text-text-muted">PM2 {status.pm2_id}</span> : null}
+                  </span>
+                </div>
+                {control?.reason ? <p className="mt-2 text-xs text-text-muted">{control.reason}</p> : null}
+                {releaseMismatch ? <p role="alert" className="mt-2 text-xs text-negative">Release mismatch. Actions disabled.</p> : null}
+              </div>
+              <div role="group" aria-label="Start mode" className="order-1 flex min-w-0 max-w-full items-center gap-1.5 overflow-x-auto xl:order-2">
+                {(['client', 'database_manager'] as StartMode[]).map((mode) => <button key={mode} type="button" aria-pressed={startMode === mode} disabled={busy || state !== 'ready' || online} onClick={() => onStartModeChange(mode)} className={`pill pill-button shrink-0 whitespace-nowrap ${startMode === mode ? 'nav-link-active' : 'pill-subtle'} disabled:pointer-events-none disabled:opacity-50`}>{mode === 'client' ? <ListTree aria-hidden="true" className="h-3.5 w-3.5" /> : <GitBranch aria-hidden="true" className="h-3.5 w-3.5" />} {mode === 'client' ? 'Client' : 'Database Manager'}</button>)}
+              </div>
+              <div data-testid="lifecycle-actions" className="order-3 border-t border-border-subtle pt-3 xl:border-t-0 xl:pt-0">
+                <h3 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.12em] text-text-muted"><Activity aria-hidden="true" size={14} />Lifecycle</h3>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <Button icon={<Play size={15} />} variant="positive" disabled={!eligible || !stopped} onClick={(event) => onLifecycle('start', event.currentTarget)}>Start</Button>
+                  <Button icon={<Square size={15} />} variant="danger" disabled={!eligible || !online} onClick={(event) => onLifecycle('stop', event.currentTarget)}>Stop</Button>
+                  <Button icon={<RotateCcw size={15} />} variant="primary" disabled={!eligible || !online} onClick={(event) => onLifecycle('restart', event.currentTarget)}>Restart</Button>
+                </div>
+                {!eligible ? <p className="mt-2 text-xs text-text-muted">Actions require a confirmed runtime and database.</p> : null}
               </div>
             </div>
-            <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-border-subtle pt-2 text-xs">
-              <span><span className="text-text-muted">Odoo</span> <strong className="font-medium text-text">{identity?.release || selectedClient.release || '?'}</strong></span>
-              <span data-testid="database-summary"><span className="text-text-muted">DB</span> <strong className="font-mono font-medium text-text">{confirmedDatabase[0]?.name || identity?.database || 'not confirmed'}</strong></span>
-            </div>
-            <div data-testid="runtime-status" className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-border-subtle pt-2 text-xs" aria-label="Runtime status">
-              <span data-testid="runtime-status-dot" role="img" aria-label={stateLabel(status?.state)} title={stateLabel(status?.state)} className={`inline-block h-3 w-3 shrink-0 rounded-full border border-border-subtle ${statusDotClass(status?.state)}`} />
-              <span className="text-text-muted">{status?.process_name || 'Process identity unavailable'}</span>
-              {status?.pid != null ? <span className="text-text-muted">PID {status.pid}</span> : null}
-              {status?.pm2_id != null ? <span className="text-text-muted">PM2 {status.pm2_id}</span> : null}
-            </div>
-            {control?.reason ? <p className="mt-2 text-xs text-text-muted">{control.reason}</p> : null}
-            {releaseMismatch ? <p role="alert" className="mt-2 text-xs text-negative">Release mismatch. Actions disabled.</p> : null}
           </>
         )}
-        <div data-testid="lifecycle-actions" className="mt-3 border-t border-border-subtle pt-3">
-          <h3 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.12em] text-text-muted"><Activity aria-hidden="true" size={14} />Lifecycle</h3>
-          <div className="mt-2 flex flex-wrap gap-2">
-            <Button icon={<Play size={15} />} variant="positive" disabled={!eligible || !stopped} onClick={(event) => onLifecycle('start', event.currentTarget)}>Start</Button>
-            <Button icon={<Square size={15} />} variant="danger" disabled={!eligible || !online} onClick={(event) => onLifecycle('stop', event.currentTarget)}>Stop</Button>
-            <Button icon={<RotateCcw size={15} />} variant="primary" disabled={!eligible || !online} onClick={(event) => onLifecycle('restart', event.currentTarget)}>Restart</Button>
-          </div>
-          {!eligible ? <p className="mt-2 text-xs text-text-muted">Actions require a confirmed runtime and database.</p> : null}
-        </div>
       </Panel>
 
       <div data-testid="desktop-workspace-grid" className="grid min-w-0 w-full gap-4 xl:flex-1 xl:h-full xl:min-h-0 xl:grid-cols-[minmax(16rem,0.25fr)_minmax(0,0.75fr)] xl:grid-rows-[minmax(0,1fr)] xl:items-stretch">
