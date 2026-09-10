@@ -79,7 +79,7 @@ if (!allModulesRow?.className.includes('max-w-full') || !allModulesRow.className
 if (screen.queryByText('Administrator password')) throw new Error('password panel must not be mounted');
 if (screen.queryByText('Operating mode')) throw new Error('mode panel must not be mounted');
 const desktopGrid = view.container.querySelector('[data-testid="desktop-workspace-grid"]');
-if (!desktopGrid?.className.includes('xl:grid-cols-[minmax(16rem,0.25fr)_minmax(0,0.75fr)]') || !desktopGrid.className.includes('w-full')) throw new Error('desktop workspace must give the log column most of the width and fill its parent');
+if (!desktopGrid?.className.includes('xl:grid-cols-[minmax(16rem,0.2fr)_minmax(0,0.8fr)]') || !desktopGrid.className.includes('w-full')) throw new Error('desktop workspace must give the log column most of the width and fill its parent');
 if (view.container.querySelector('[data-testid="client-selection"]')?.nextElementSibling !== desktopGrid) throw new Error('Instance must remain above the desktop workspace grid');
 const desktopLeft = desktopGrid.querySelector('[data-testid="desktop-left-column"]');
 if (!desktopLeft?.querySelector('[data-testid="module-updates"]')) throw new Error('desktop module list must be in the left column');
@@ -93,7 +93,7 @@ if (!modulePanel?.className.includes('xl:flex-1') || !modulePanel.className.incl
 if (!view.container.querySelector('[data-testid="module-list"]')?.className.includes('xl:flex-1') || !view.container.querySelector('[data-testid="module-list"]')?.className.includes('xl:overflow-y-auto')) throw new Error('desktop module list must own the internal scroll');
 if (!desktopGrid.querySelector('[data-testid="odoo-logs"]')?.className.includes('w-full') || !desktopGrid.querySelector('[data-testid="odoo-logs"]')?.className.includes('xl:h-full') || !desktopGrid.querySelector('[data-testid="odoo-logs"]')?.className.includes('xl:min-h-0')) throw new Error('desktop log panel must fill the remaining column width and height');
 if (!view.container.querySelector('[data-testid="odoo-log-viewport"]')?.className.includes('xl:max-h-none') || !view.container.querySelector('[data-testid="odoo-log-viewport"]')?.className.includes('xl:flex-1')) throw new Error('desktop log viewport must consume the remaining panel height');
-if (!screen.getByText('Odoo logs')) throw new Error('Odoo log panel is missing');
+if (!screen.getByText('Log')) throw new Error('Odoo log panel is missing');
 
 const user = userEvent.setup();
 const installedModule = screen.getByRole('checkbox', { name: 'Select module base' });
