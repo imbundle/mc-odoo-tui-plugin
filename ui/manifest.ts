@@ -7,7 +7,7 @@ const manifest: PluginManifest = {
   version: '0.1.0',
   enabled: true,
   routePath: '/odoo-tui',
-  navItem: { to: '/odoo-tui', label: 'odoo', icon: 'PackageOpen', order: 70 },
+  navItem: { to: '/odoo-tui', label: 'odoo', icon: 'Circle', order: 70 },
   endpoints: [
     { method: 'GET', path: '/odoo-tui/clients', handler: 'listClients', authRequired: true },
     { method: 'GET', path: '/odoo-tui/releases', handler: 'listReleases', authRequired: true },
