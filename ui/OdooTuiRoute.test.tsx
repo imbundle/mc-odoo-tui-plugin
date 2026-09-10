@@ -50,7 +50,8 @@ if (!screen.getByRole('button', { name: 'Start' }).className.includes('text-posi
 if (!screen.getByRole('button', { name: 'Stop' }).className.includes('text-negative')) throw new Error('Stop must use negative text styling');
 if (!screen.getByRole('button', { name: 'Restart' }).className.includes('text-accent')) throw new Error('Restart must use accent text styling');
 if (!screen.getByRole('button', { name: 'Restart' }).className.includes('border-border')) throw new Error('lifecycle buttons must use the neutral border style');
-if (!screen.getByRole('button', { name: 'Restart' }).className.includes('rounded-lg')) throw new Error('lifecycle buttons must use the compact rounded style');
+if (!screen.getByRole('button', { name: 'Restart' }).className.includes('rounded-[var(--control-radius)]')) throw new Error('lifecycle buttons must use the host rounded style');
+if (!screen.getByRole('button', { name: 'Restart' }).querySelector('svg')) throw new Error('lifecycle buttons must render an icon');
 if (!view.container.querySelector('[data-testid="client-selection"] [data-testid="runtime-status"]')) throw new Error('runtime status must be inside Instance');
 if (!view.container.querySelector('[data-testid="runtime-status-dot"]')?.className.includes('animate-pulse')) throw new Error('online status dot must pulse');
 if (screen.queryByText('Online')) throw new Error('runtime state text should be represented by the status dot');
@@ -58,7 +59,7 @@ if (!screen.getByRole('button', { name: 'Client' })) throw new Error('Client sta
 if (!screen.getByRole('button', { name: 'Database Manager' })) throw new Error('Database Manager start mode is missing');
 if (screen.queryByText('Start as')) throw new Error('start mode label is redundant');
 if (screen.queryByText(/Mode:/)) throw new Error('mode summary is redundant');
-if (!screen.getByRole('button', { name: 'Client' }).className.includes('bg-accent-subtle')) throw new Error('selected mode must be visibly highlighted');
+if (!screen.getByRole('button', { name: 'Client' }).className.includes('bg-accent')) throw new Error('selected mode must be visibly highlighted');
 if (screen.getByRole('button', { name: 'Client' }).className.includes('border-accent')) throw new Error('selected mode must not create a second inner border');
 if (!view.container.querySelector('#odoo-client-selector')?.className.includes('h-11')) throw new Error('client selector height is not normalized');
 if (!view.container.querySelector('[aria-label="Start mode"]')?.className.includes('h-11')) throw new Error('start mode height is not normalized');

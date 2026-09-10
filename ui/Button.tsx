@@ -4,6 +4,8 @@ type ButtonVariant = 'primary' | 'positive' | 'secondary' | 'danger' | 'ghost';
 
 type ButtonProps = {
   children: ReactNode;
+  icon?: ReactNode;
+  iconOnly?: boolean;
   variant?: ButtonVariant;
   disabled?: boolean;
   onClick?: (event: React.MouseEvent<HTMLButtonElement>) => void;
@@ -20,7 +22,7 @@ const styles: Record<ButtonVariant, string> = {
   ghost: 'border-transparent bg-transparent text-text-muted hover:bg-surface hover:text-text active:bg-surface-raised focus-visible:ring-border',
 };
 
-export function Button({ children, variant = 'secondary', disabled = false, onClick, type = 'button', ariaLabel, testId }: ButtonProps) {
+export function Button({ children, icon, iconOnly = false, variant = 'secondary', disabled = false, onClick, type = 'button', ariaLabel, testId }: ButtonProps) {
   return (
     <button
       type={type}
@@ -28,8 +30,9 @@ export function Button({ children, variant = 'secondary', disabled = false, onCl
       onClick={onClick}
       aria-label={ariaLabel}
       data-testid={testId}
-      className={`inline-flex min-h-[44px] min-w-[44px] items-center justify-center gap-2 rounded-lg border px-3 text-sm font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-surface disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-45 ${styles[variant]}`}
+      className={`inline-flex min-h-11 min-w-11 items-center justify-center gap-1.5 rounded-[var(--control-radius)] border px-2.5 text-xs font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-surface disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-45 ${iconOnly ? 'px-0' : ''} ${styles[variant]}`}
     >
+      {icon ? <span aria-hidden="true" className="shrink-0">{icon}</span> : null}
       {children}
     </button>
   );

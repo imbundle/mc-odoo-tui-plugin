@@ -6,6 +6,7 @@
     "test:ui": "tsx ui/OdooTuiRoute.test.tsx"
   },
   "dependencies": {
+    "lucide-react": "^1.44.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },

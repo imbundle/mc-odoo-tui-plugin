@@ -1,4 +1,5 @@
 import React from 'react';
+import { Activity, ChevronDown, Play, RefreshCw, RotateCcw, Square } from 'lucide-react';
 import { Button } from './Button';
 import type { OdooClient, OdooControl, OdooDatabase, OdooIdentity, OdooModule, OdooStatus, OdooWorkspaceData, RuntimeState, StartMode } from './types';
 
@@ -39,7 +40,7 @@ function statusDotClass(state?: RuntimeState): string {
 }
 function Panel({ testId, title, children }: { testId: string; title: string; children: React.ReactNode }) {
   return (
-    <section data-testid={testId} aria-labelledby={`${testId}-heading`} className="box-border min-w-0 max-w-full overflow-visible rounded-lg border border-border bg-surface-raised p-3 sm:p-4">
+    <section data-testid={testId} aria-labelledby={`${testId}-heading`} className="card box-border min-w-0 max-w-full overflow-visible rounded-[var(--control-radius)] border border-border bg-surface-raised p-3 sm:p-4">
       <h2 id={`${testId}-heading`} className="text-sm font-semibold text-text">{title}</h2>
       {children}
     </section>
@@ -49,9 +50,9 @@ function Panel({ testId, title, children }: { testId: string; title: string; chi
 function StateNotice({ state, error, onRefresh }: Pick<OdooWorkspaceProps, 'state' | 'error' | 'onRefresh'>) {
   const message = state === 'loading' ? 'Loading Odoo data…' : error || (state === 'unavailable' ? 'The Odoo backend is unavailable.' : 'Some Odoo data could not be loaded.');
   return (
-    <div data-testid="odoo-tui-state-notice" role={state === 'error' || state === 'unavailable' ? 'alert' : 'status'} aria-live="polite" aria-busy={state === 'loading'} className="flex min-h-[44px] items-center justify-between gap-3 rounded-xl border border-border bg-surface px-4 py-3 text-sm text-text">
-      <span>{message}</span>
-      {state !== 'ready' ? <Button onClick={onRefresh}>Refresh</Button> : null}
+    <div data-testid="odoo-tui-state-notice" role={state === 'error' || state === 'unavailable' ? 'alert' : 'status'} aria-live="polite" aria-busy={state === 'loading'} className="card flex min-h-11 items-center justify-between gap-3 rounded-[var(--control-radius)] border border-border bg-surface px-4 py-3 text-sm text-text">
+      <span className="min-w-0">{message}</span>
+      {state !== 'ready' ? <Button icon={<RefreshCw size={15} />} onClick={onRefresh}>Refresh</Button> : null}
     </div>
   );
 }
@@ -126,13 +127,13 @@ export function OdooWorkspace({
             <div className="flex flex-wrap items-end gap-2">
               <div className="relative min-w-[12rem] flex-1">
                 <span className="block text-xs font-medium text-text">Client</span>
-                <button id="odoo-client-selector" type="button" aria-label="Registered Odoo client" aria-expanded={clientListOpen} aria-controls="odoo-client-list" onClick={() => { const next = !clientListOpen; setClientListOpen(next); if (next) onClientListOpen(); }} disabled={state === 'loading' || busy} className="mt-1 flex h-11 min-h-11 w-full min-w-0 items-center justify-between gap-2 rounded-md border border-border bg-surface px-2.5 text-left text-sm text-text transition-colors hover:border-border-subtle hover:bg-surface-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 disabled:cursor-not-allowed disabled:opacity-60"><span className="min-w-0 truncate">{selectedClient?.name || 'Select a client'}</span><span aria-hidden="true" className="shrink-0 text-text-muted">⌄</span></button>
+                <button id="odoo-client-selector" type="button" aria-label="Registered Odoo client" aria-expanded={clientListOpen} aria-controls="odoo-client-list" onClick={() => { const next = !clientListOpen; setClientListOpen(next); if (next) onClientListOpen(); }} disabled={state === 'loading' || busy} className="mt-1 flex h-11 min-h-11 w-full min-w-0 items-center justify-between gap-2 rounded-[var(--control-radius)] border border-border bg-surface px-2.5 text-left text-sm text-text transition-colors hover:border-border-subtle hover:bg-surface-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 disabled:cursor-not-allowed disabled:opacity-60"><span className="min-w-0 truncate">{selectedClient?.name || 'Select a client'}</span><ChevronDown aria-hidden="true" size={16} className="shrink-0 text-text-muted" /></button>
                 {clientListOpen ? <div id="odoo-client-list" role="listbox" aria-label="Registered Odoo clients" className="absolute left-0 top-full z-30 mt-2 max-h-72 w-full min-w-[16rem] overflow-y-auto rounded-lg border border-border bg-surface-raised p-1 shadow-xl">
                   {data.clients.map((client) => { const clientState = clientStatuses[client.name] ?? (client.name === data.selectedClient ? status?.state : undefined); return <button key={client.name} type="button" role="option" aria-selected={client.name === data.selectedClient} onClick={() => { onClientChange(client.name); setClientListOpen(false); }} className={`flex min-h-[44px] w-full min-w-0 items-center gap-2 rounded-md px-2.5 py-1.5 text-left transition-colors hover:bg-surface ${client.name === data.selectedClient ? 'bg-accent-subtle' : ''}`}><span aria-hidden="true" className={`inline-block h-2.5 w-2.5 shrink-0 rounded-full ${statusDotClass(clientState)}`} /><span className="min-w-0 flex-1 truncate text-sm text-text">{client.name}</span><span className="shrink-0 text-xs text-text-muted">{stateLabel(clientState)}</span></button>; })}
                 </div> : null}
               </div>
-              <div role="group" aria-label="Start mode" className="inline-flex h-11 min-h-11 w-fit max-w-full flex-none items-center gap-1 overflow-hidden rounded-lg border border-border bg-surface p-1">
-                {(['client', 'database_manager'] as StartMode[]).map((mode) => <button key={mode} type="button" aria-pressed={startMode === mode} disabled={busy || state !== 'ready' || online} onClick={() => onStartModeChange(mode)} className={`h-9 min-h-[36px] min-w-0 flex-none whitespace-nowrap rounded-md px-3 text-xs font-medium leading-none transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 ${startMode === mode ? 'bg-accent-subtle text-accent shadow-sm' : 'text-text-muted hover:bg-surface-raised/70 hover:text-text'} disabled:cursor-not-allowed disabled:opacity-50`}>{mode === 'client' ? 'Client' : 'Database Manager'}</button>)}
+              <div role="group" aria-label="Start mode" className="inline-flex h-11 min-h-11 w-fit max-w-full flex-none items-center gap-1 overflow-hidden rounded-full bg-surface-sunken p-1">
+                {(['client', 'database_manager'] as StartMode[]).map((mode) => <button key={mode} type="button" aria-pressed={startMode === mode} disabled={busy || state !== 'ready' || online} onClick={() => onStartModeChange(mode)} className={`h-9 min-h-[36px] min-w-0 flex-none whitespace-nowrap rounded-full px-3 text-xs font-medium leading-none transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 ${startMode === mode ? 'bg-accent text-white shadow-sm' : 'text-text-muted hover:bg-surface-raised/70 hover:text-text'} disabled:cursor-not-allowed disabled:opacity-50`}>{mode === 'client' ? 'Client' : 'Database Manager'}</button>)}
               </div>
             </div>
             <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-border-subtle pt-2 text-xs">
@@ -150,11 +151,11 @@ export function OdooWorkspace({
           </>
         )}
         <div data-testid="lifecycle-actions" className="mt-3 border-t border-border-subtle pt-3">
-          <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-text-muted">Lifecycle</h3>
+          <h3 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.12em] text-text-muted"><Activity aria-hidden="true" size={14} />Lifecycle</h3>
           <div className="mt-2 flex flex-wrap gap-2">
-            <Button variant="positive" disabled={!eligible || !stopped} onClick={(event) => onLifecycle('start', event.currentTarget)}>Start</Button>
-            <Button variant="danger" disabled={!eligible || !online} onClick={(event) => onLifecycle('stop', event.currentTarget)}>Stop</Button>
-            <Button variant="primary" disabled={!eligible || !online} onClick={(event) => onLifecycle('restart', event.currentTarget)}>Restart</Button>
+            <Button icon={<Play size={15} />} variant="positive" disabled={!eligible || !stopped} onClick={(event) => onLifecycle('start', event.currentTarget)}>Start</Button>
+            <Button icon={<Square size={15} />} variant="danger" disabled={!eligible || !online} onClick={(event) => onLifecycle('stop', event.currentTarget)}>Stop</Button>
+            <Button icon={<RotateCcw size={15} />} variant="primary" disabled={!eligible || !online} onClick={(event) => onLifecycle('restart', event.currentTarget)}>Restart</Button>
           </div>
           {!eligible ? <p className="mt-2 text-xs text-text-muted">Actions require a confirmed runtime and database.</p> : null}
         </div>
