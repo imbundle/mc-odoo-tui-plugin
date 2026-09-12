@@ -40,6 +40,20 @@ function statusDotClass(state?: RuntimeState): string {
   if (state === 'stopped') return 'bg-text-muted';
   return 'bg-warning animate-pulse';
 }
+
+function formatLogTimestamp(timestamp: string | null): string {
+  if (!timestamp) return 'timestamp unavailable';
+  const match = timestamp.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2}:\d{2}(?:[.,]\d{1,6})?)/);
+  if (!match) return timestamp;
+  return `${match[1]} ${match[2].replace('.', ',')}`;
+}
+
+function logLevelClass(level: string | null): string {
+  if (level === 'ERROR' || level === 'CRITICAL') return '!bg-rose-500/15 !text-rose-300 !border !border-rose-400/35';
+  if (level === 'WARNING') return '!bg-amber-500/15 !text-amber-300 !border !border-amber-400/35';
+  return '!bg-sky-500/15 !text-sky-300 !border !border-sky-400/35';
+}
+
 function Panel({ testId, title, icon, children, className = '' }: { testId: string; title: string; icon?: React.ReactNode; children: React.ReactNode; className?: string }) {
   return (
     <section data-testid={testId} aria-labelledby={`${testId}-heading`} className={`card box-border min-w-0 max-w-full overflow-visible rounded-[var(--control-radius)] border border-border bg-surface-raised p-3 sm:p-4 ${className}`}>
@@ -191,7 +205,7 @@ export function OdooWorkspace({
         <Panel testId="odoo-logs" title="Log" icon={<ScrollText aria-hidden="true" size={15} className="text-text-muted" />} className="min-w-0 w-full xl:flex xl:h-full xl:min-h-0 xl:flex-col">
           {!data.logs ? <p className="mt-3 text-sm text-text-muted">Odoo log is unavailable for this client.</p> : data.status?.state !== 'online' ? <p className="mt-3 text-sm text-text-muted">No Odoo log: this client is not running.</p> : data.logs.entries.length === 0 ? <p className="mt-3 text-sm text-text-muted">No Odoo log entries in the current window.</p> : <>
             {showJumpToLatest ? <div className="mt-3 flex justify-end"><Button onClick={jumpToLatest} ariaLabel="Jump to latest Odoo log entry">Jump to latest</Button></div> : null}
-            <div ref={logViewportRef} data-testid="odoo-log-viewport" aria-label="Odoo log entries" onScroll={handleLogScroll} className="mt-3 min-h-[10rem] max-h-[min(28rem,calc(100dvh-12rem))] xl:max-h-none xl:flex-1 xl:min-h-0 min-w-0 overflow-y-auto overscroll-contain pr-1"><div className="grid gap-2">{data.logs.entries.map((entry, index) => <article key={`${entry.timestamp ?? 'unknown'}-${entry.pid ?? 'nopid'}-${index}`} className="box-border min-w-0 max-w-full rounded-lg border border-border-subtle p-3 overflow-hidden"><div className="flex flex-wrap items-center gap-2 text-xs text-text-muted">{entry.timestamp ? <time className="max-w-full break-all" dateTime={entry.timestamp}>{entry.timestamp}</time> : <span>timestamp unavailable</span>}<span className={`rounded-full border px-2 py-1 ${entry.level === 'ERROR' || entry.level === 'CRITICAL' ? 'border-negative text-negative' : entry.level === 'WARNING' ? 'border-warning text-warning' : 'border-accent text-accent'}`}>{entry.level ?? 'INFO'}</span>{entry.pid != null ? <span>PID {entry.pid}</span> : null}{entry.database ? <span className="font-mono">{entry.database}</span> : null}{entry.logger ? <span className="font-mono">{entry.logger}</span> : null}</div><p className="mt-2 whitespace-pre-wrap break-words font-mono text-xs leading-relaxed text-text">{entry.message}</p></article>)}</div></div>
+            <div ref={logViewportRef} data-testid="odoo-log-viewport" aria-label="Odoo log entries" onScroll={handleLogScroll} className="mt-3 min-h-[10rem] max-h-[min(28rem,calc(100dvh-12rem))] xl:max-h-none xl:flex-1 xl:min-h-0 min-w-0 overflow-y-auto overscroll-contain pr-1"><div className="grid gap-2">{data.logs.entries.map((entry, index) => <article key={`${entry.timestamp ?? 'unknown'}-${entry.pid ?? 'nopid'}-${index}`} className="box-border min-w-0 max-w-full rounded-lg border border-border-subtle p-3 overflow-hidden"><div className="flex flex-wrap items-center gap-1.5 text-[11px]"><span className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ${logLevelClass(entry.level)}`}>{entry.level ?? 'INFO'}</span><time className="inline-flex shrink-0 items-center rounded-full border border-border bg-surface px-2.5 py-0.5 font-mono text-xs tabular-nums text-text-muted" dateTime={entry.timestamp ?? undefined}>{formatLogTimestamp(entry.timestamp)}</time></div><p className="mt-2 whitespace-pre-wrap break-words font-mono text-xs leading-relaxed text-text">{entry.message}</p></article>)}</div></div>
           </>}
         </Panel>
       </div>

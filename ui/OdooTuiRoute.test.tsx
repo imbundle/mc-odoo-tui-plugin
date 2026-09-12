@@ -40,7 +40,7 @@ const api = {
   getControl: async () => ({ control: { control_mode: 'client', lifecycle_eligible: true, reason: null } }),
   getModules: async () => ({ client: 'acme', modules: [{ name: 'base', version: '1.0', installed: true, installable: true, update_available: false, dependencies: [] }, { name: 'demo', version: '1.0', installed: false, installable: true, update_available: false, dependencies: [] }] }),
   getDatabases: async () => ({ client: 'acme', databases: [{ name: '19_acme', exists: true }] }),
-  getLogs: async () => ({ entries: [{ timestamp: '2026-09-09T10:00:00Z', pid: 123, level: 'INFO', database: '19_acme', logger: 'odoo.modules.loading', message: 'Odoo worker ready' }], next_cursor: 'cursor', has_more: false, cursor_reset: false }),
+  getLogs: async () => ({ entries: [{ timestamp: '2026-09-09T10:00:00Z', pid: 123, level: 'INFO', database: '19_acme', logger: 'odoo.modules.loading', message: 'Odoo worker ready' }, { timestamp: '2026-09-09T10:01:02.123Z', pid: 123, level: 'WARNING', database: '19_acme', logger: 'odoo.sql_db', message: 'Connection pool is busy' }, { timestamp: '2026-09-09T10:02:03.456Z', pid: 123, level: 'ERROR', database: '19_acme', logger: 'odoo.http', message: 'Request failed' }], next_cursor: 'cursor', has_more: false, cursor_reset: false }),
   start: async () => { calls.push('start'); return { client: 'acme', operation: 'start', state: 'online' }; },
   stop: async () => { calls.push('stop'); return { client: 'acme', operation: 'stop', state: 'stopped' }; },
   restart: async (_client: string, _confirmation: string, selector?: { modules: string[] } | { update_all: true }) => { calls.push(`restart:${JSON.stringify(selector ?? null)}`); return { client: 'acme', operation: 'restart', state: 'online' }; },
@@ -83,6 +83,22 @@ if (!view.container.querySelector('label[title="Update all installed modules"] >
 if (screen.queryByText('All installed')) throw new Error('ALL selector must not use an overflowing text label');
 await waitFor(() => screen.getByText('Odoo worker ready'));
 if (!screen.getByText('Odoo worker ready')) throw new Error('Odoo log entry is missing');
+const logArticles = [...view.container.querySelectorAll('[data-testid="odoo-logs"] article')];
+if (logArticles.length !== 3) throw new Error('log fixture entries are missing');
+const firstLogMeta = logArticles[0].querySelector('div');
+if (!firstLogMeta?.textContent?.includes('INFO') || !firstLogMeta.textContent.includes('2026-09-09') || !firstLogMeta.textContent.includes('10:00:00')) throw new Error('log metadata must show level, date, and time');
+if (firstLogMeta.textContent.includes('PID') || firstLogMeta.textContent.includes('19_acme') || firstLogMeta.textContent.includes('odoo.modules.loading')) throw new Error('log metadata must not show PID, database, or logger');
+for (const article of logArticles) {
+  const pills = [...article.querySelectorAll('div > span, div > time')];
+  if (pills.length !== 2) throw new Error('each log row must show only level and timestamp pills');
+  for (const pill of pills) {
+    if (!pill.className.includes('rounded-full') || !pill.className.includes('px-2.5') || !pill.className.includes('py-0.5')) throw new Error('log metadata pills must use the Mission Control Badge style');
+  }
+}
+if (logArticles[0].querySelector('time')?.textContent !== '2026-09-09 10:00:00') throw new Error('timestamp must be rendered as one compact pill');
+if (!logArticles[0].querySelector('span')?.className.includes('text-sky-300')) throw new Error('INFO must use the Agents event-badge color');
+if (!logArticles[1].querySelector('span')?.className.includes('text-amber-300')) throw new Error('WARNING must retain warning color');
+if (!logArticles[2].querySelector('span')?.className.includes('text-rose-300')) throw new Error('ERROR must retain negative color');
 const logViewport = view.container.querySelector('[data-testid="odoo-log-viewport"]');
 if (!logViewport || !logViewport.className.includes('overflow-y-auto')) throw new Error('Odoo log viewport must scroll');
 if (!logViewport.className.includes('100dvh')) throw new Error('Odoo log viewport must use responsive viewport height');
