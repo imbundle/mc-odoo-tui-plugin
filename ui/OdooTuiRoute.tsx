@@ -1439,6 +1439,7 @@ export function OdooTuiRoute({ api: suppliedApi }: OdooTuiRouteProps) {
         moduleReadConfirmed={moduleReadConfirmed}
         startMode={startMode}
         clientStatuses={clientStatuses}
+        clientSnapshots={snapshotsRef.current}
         allModulesSelected={allModulesSelected}
         selectedModules={selectedModules}
         onClientChange={onClientChange}

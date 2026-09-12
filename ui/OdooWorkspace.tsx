@@ -1,5 +1,5 @@
 import React from 'react';
-import { Activity, AlertTriangle, ChevronDown, Database as DatabaseIcon, GitBranch, Info, ListTree, Package, Play, RefreshCw, RotateCcw, ScrollText, Server, Settings2, Square } from 'lucide-react';
+import { Activity, AlertTriangle, ChevronDown, Database as DatabaseIcon, GitBranch, ListTree, Package, Play, RefreshCw, RotateCcw, ScrollText, Settings2, Square } from 'lucide-react';
 import { Button } from './Button';
 import type { OdooClient, OdooControl, OdooDatabase, SafeOdooIdentity, OdooModule, OdooStatus, OdooWorkspaceData, RuntimeState, StartMode } from './types';
 
@@ -16,6 +16,7 @@ export interface OdooWorkspaceProps {
   moduleReadConfirmed?: boolean;
   startMode: StartMode;
   clientStatuses: Record<string, RuntimeState | undefined>;
+  clientSnapshots?: Record<string, OdooWorkspaceData>;
   allModulesSelected: boolean;
   selectedModules: Set<string>;
   onClientChange: (client: string) => void;
@@ -90,6 +91,7 @@ export function OdooWorkspace({
   moduleReadConfirmed = true,
   startMode,
   clientStatuses,
+  clientSnapshots,
   allModulesSelected,
   selectedModules,
   onClientChange,
@@ -101,11 +103,29 @@ export function OdooWorkspace({
   onModuleToggle,
 }: OdooWorkspaceProps) {
   const logViewportRef = React.useRef<HTMLDivElement>(null);
+  const selectedClientButtonRef = React.useRef<HTMLButtonElement>(null);
+  const accordionTransitionInitializedRef = React.useRef(false);
   const followLogsRef = React.useRef(true);
-  const [clientListOpen, setClientListOpen] = React.useState(false);
+  const [clientAccordionOpen, setClientAccordionOpen] = React.useState(false);
+  const [accordionInteractive, setAccordionInteractive] = React.useState(false);
+  const [modulesInteractive, setModulesInteractive] = React.useState(true);
   const [showJumpToLatest, setShowJumpToLatest] = React.useState(false);
   const latestLog = data.logs?.entries[data.logs.entries.length - 1];
   const latestLogKey = latestLog ? `${latestLog.timestamp ?? ''}|${latestLog.level ?? ''}|${latestLog.message}` : 'empty';
+
+  React.useEffect(() => {
+    if (!accordionTransitionInitializedRef.current) {
+      accordionTransitionInitializedRef.current = true;
+      return;
+    }
+    setAccordionInteractive(false);
+    setModulesInteractive(false);
+    const timer = window.setTimeout(() => {
+      if (clientAccordionOpen) setAccordionInteractive(true);
+      else setModulesInteractive(true);
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [clientAccordionOpen]);
 
   React.useEffect(() => {
     const viewport = logViewportRef.current;
@@ -149,31 +169,41 @@ export function OdooWorkspace({
       {state !== 'ready' ? <StateNotice state={state} error={error} onRefresh={onRefresh} /> : null}
       {state === 'ready' && (!readModelConfirmed || !moduleReadConfirmed) ? <p data-testid="odoo-tui-stale-indicator" role="status" aria-live="polite" className="text-xs text-text-muted">Some Odoo data is being refreshed; affected actions remain disabled until confirmed.</p> : null}
 
-      <Panel testId="client-selection" title="Instance" showHeading={false}>
-        {data.clients.length === 0 ? <p className="mt-2 text-sm text-text-muted">No registered Odoo clients are available.</p> : (
-          <>
-            <div className="flex flex-wrap items-end gap-2">
-              <div className="relative min-w-[12rem] flex-1">
-                <button id="odoo-client-selector" type="button" aria-label="Registered Odoo client" aria-expanded={clientListOpen} aria-controls="odoo-client-list" onClick={() => { const next = !clientListOpen; setClientListOpen(next); if (next) onClientListOpen(); }} disabled={state === 'loading' || busy} className="mt-1 flex h-11 min-h-11 w-full min-w-0 items-center justify-between gap-2 rounded-[var(--control-radius)] border border-border bg-surface px-2.5 text-left text-sm text-text transition-colors hover:border-border-subtle hover:bg-surface-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 disabled:cursor-not-allowed disabled:opacity-60"><span className="min-w-0 truncate">{selectedClient?.name || 'Select a client'}</span><ChevronDown aria-hidden="true" size={16} className="shrink-0 text-text-muted" /></button>
-                {clientListOpen ? <div id="odoo-client-list" role="listbox" aria-label="Registered Odoo clients" className="absolute left-0 top-full z-30 mt-2 max-h-72 w-full min-w-[16rem] overflow-y-auto rounded-lg border border-border bg-surface-raised p-1 shadow-xl">
-                  {data.clients.map((client) => { const clientState = clientStatuses[client.name] ?? (client.name === data.selectedClient ? status?.state : undefined); return <button key={client.name} type="button" role="option" aria-selected={client.name === data.selectedClient} onClick={() => { onClientChange(client.name); setClientListOpen(false); }} className={`flex min-h-[44px] w-full min-w-0 items-center gap-2 rounded-md px-2.5 py-1.5 text-left transition-colors hover:bg-surface ${client.name === data.selectedClient ? 'bg-accent-subtle' : ''}`}><span aria-hidden="true" className={`inline-block h-2.5 w-2.5 shrink-0 rounded-full ${statusDotClass(clientState)}`} /><span className="min-w-0 flex-1 truncate text-sm text-text">{client.name}</span><span className="shrink-0 text-xs text-text-muted">{stateLabel(clientState)}</span></button>; })}
-                </div> : null}
-              </div>
-            </div>
-          </>
-        )}
-      </Panel>
-
       <div data-testid="desktop-workspace-grid" className="grid min-w-0 w-full gap-4 xl:flex-1 xl:h-full xl:min-h-0 xl:grid-cols-[minmax(16rem,0.2fr)_minmax(0,0.8fr)] xl:grid-rows-[minmax(0,1fr)] xl:items-stretch xl:gap-4">
         <div data-testid="desktop-left-column" className="min-w-0 space-y-4 xl:flex xl:h-full xl:min-h-0 xl:flex-col">
-        <Panel testId="module-updates" title={<span className="flex min-w-0 flex-1 items-center justify-between gap-3"><span className="text-base font-semibold uppercase tracking-[0.04em]">{selectedClient?.name || 'Info'}</span><span className="shrink-0 rounded-full bg-accent-subtle px-2.5 py-1 text-xs font-medium text-accent">Odoo {identity?.release || selectedClient?.release || '?'}</span></span>} icon={<Info aria-hidden="true" size={16} className="text-text-muted" />} className="xl:flex xl:min-h-0 xl:flex-1 xl:flex-col p-4">
-          <div data-testid="instance-info" className="mt-3 pb-2 text-xs">
-            <div className="flex min-h-6 min-w-0 items-center gap-2 text-text-muted"><DatabaseIcon aria-hidden="true" size={15} className="shrink-0" /><strong data-testid="database-summary" className="min-w-0 truncate font-mono font-medium text-text">{confirmedDatabase[0]?.name || identity?.database || 'not confirmed'}</strong></div>
-            <div data-testid="runtime-status" className="mt-2 min-w-0 truncate font-mono text-xs leading-4 text-text-muted" aria-label="Runtime process">{status?.process_name || 'Process identity unavailable'}{status?.pid != null ? ` · PID ${status.pid}` : ''}{status?.pm2_id != null ? ` · PM2 ${status.pm2_id}` : ''}</div>
-            {control?.reason ? <p className="mt-2 text-xs text-text-muted">{control.reason}</p> : null}
-            {releaseMismatch ? <p role="alert" className="mt-2 text-xs text-negative">Release mismatch. Actions disabled.</p> : null}
-          </div>
-          <h3 className="mt-4 flex items-center gap-1.5 text-sm font-semibold text-text"><Package aria-hidden="true" size={15} className="text-text-muted" />Modules</h3>
+        <Panel testId="client-selection" title="Instance" showHeading={false} className="space-y-4 xl:flex xl:min-h-0 xl:flex-1 xl:flex-col">
+          {data.clients.length === 0 ? <p className="mt-2 text-sm text-text-muted">No registered Odoo clients are available.</p> : (
+            <>
+              <button ref={selectedClientButtonRef} type="button" aria-label={`Open ${selectedClient?.name || 'selected'} client panel: ${stateLabel(status?.state)}, Odoo ${identity?.release || selectedClient?.release || '?'}, database ${confirmedDatabase[0]?.name || identity?.database || 'Database not confirmed'}, process ${status?.process_name || 'Process identity unavailable'}${status?.pid != null ? `, PID ${status.pid}` : ''}${status?.pm2_id != null ? `, PM2 ${status.pm2_id}` : ''}`} aria-expanded={clientAccordionOpen} aria-controls="client-accordion-list" onClick={() => { setClientAccordionOpen((open) => { const next = !open; if (next) onClientListOpen(); return next; }); }} disabled={state === 'loading' || busy} className="group flex min-h-[96px] min-w-0 w-full flex-col rounded-lg border border-border-subtle bg-surface px-3 py-2.5 text-left transition-all duration-200 hover:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 disabled:cursor-not-allowed disabled:opacity-60">
+                <span className="flex min-w-0 items-center gap-2">
+                  <span aria-hidden="true" className={`inline-block h-2.5 w-2.5 shrink-0 rounded-full ${statusDotClass(status?.state)}`} />
+                  <span className="min-w-0 flex-1 truncate text-sm font-semibold uppercase tracking-[0.04em] text-text">{selectedClient?.name || 'Select a client'}</span>
+                  <span className="shrink-0 rounded-full bg-accent-subtle px-2.5 py-1 text-xs font-medium text-accent">Odoo {identity?.release || selectedClient?.release || '?'}</span>
+                  <ChevronDown aria-hidden="true" size={16} className={`shrink-0 text-text-muted transition-transform duration-300 ${clientAccordionOpen ? '-rotate-180' : ''}`} />
+                </span>
+                <span data-testid="database-summary" className="mt-2 flex min-w-0 items-center gap-2 text-xs text-text-muted"><DatabaseIcon aria-hidden="true" size={14} className="shrink-0" /><span className="min-w-0 truncate font-mono">{confirmedDatabase[0]?.name || identity?.database || 'Database not confirmed'}</span></span>
+                <span data-testid="runtime-status" aria-label="Runtime process" className="mt-1 min-w-0 truncate font-mono text-[11px] text-text-muted">{status?.process_name || 'Process identity unavailable'}{status?.pid != null ? ` · PID ${status.pid}` : ''}{status?.pm2_id != null ? ` · PM2 ${status.pm2_id}` : ''}</span>
+              </button>
+              <div id="client-accordion-list" data-testid="client-accordion" role="list" aria-label="Registered Odoo clients" inert={!clientAccordionOpen || !accordionInteractive} className={`overflow-y-auto overflow-x-hidden transition-[max-height,opacity] duration-300 ease-in-out ${clientAccordionOpen ? 'mt-2 max-h-[min(70dvh,2000px)] opacity-100' : 'max-h-0 opacity-0 pointer-events-none'}`} aria-hidden={!clientAccordionOpen || !accordionInteractive}>
+                <div className="flex flex-col gap-2">
+                  {data.clients.filter((client) => client.name !== data.selectedClient).map((client) => {
+                    const clientData = clientSnapshots?.[client.name];
+                    const clientState = clientData?.status?.state ?? clientStatuses[client.name];
+                    const clientDatabase = clientData?.databases?.find((database) => database.exists)?.name || clientData?.identity?.database;
+                    const clientStatus = clientData?.status;
+                    return <div key={client.name} role="listitem" className="min-w-0"><button type="button" aria-label={`Select ${client.name} client: ${stateLabel(clientState)}, Odoo ${clientData?.identity?.release || client.release || '?'}, database ${clientDatabase || 'Database not confirmed'}, process ${clientStatus?.process_name || 'unavailable'}${clientStatus?.pid != null ? `, PID ${clientStatus.pid}` : ''}${clientStatus?.pm2_id != null ? `, PM2 ${clientStatus.pm2_id}` : ''}`} onClick={() => { onClientChange(client.name); setClientAccordionOpen(false); selectedClientButtonRef.current?.focus(); }} disabled={state === 'loading' || busy} className="group flex min-h-[96px] min-w-0 w-full flex-col rounded-lg border border-border-subtle bg-surface px-3 py-2.5 text-left transition-all duration-200 hover:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 disabled:cursor-not-allowed disabled:opacity-60">
+                      <span className="flex min-w-0 items-center gap-2"><span aria-hidden="true" className={`inline-block h-2.5 w-2.5 shrink-0 rounded-full ${statusDotClass(clientState)}`} /><span className="min-w-0 flex-1 truncate text-sm font-semibold uppercase tracking-[0.04em] text-text">{client.name}</span><span className="shrink-0 rounded-full bg-accent-subtle px-2.5 py-1 text-xs font-medium text-accent">Odoo {clientData?.identity?.release || client.release || '?'}</span><ChevronDown aria-hidden="true" size={16} className="shrink-0 text-text-muted" /></span>
+                      <span className="mt-2 flex min-w-0 items-center gap-2 text-xs text-text-muted"><DatabaseIcon aria-hidden="true" size={14} className="shrink-0" /><span className="min-w-0 truncate font-mono">{clientDatabase || 'Database not confirmed'}</span></span>
+                      <span className="mt-1 min-w-0 truncate font-mono text-[11px] text-text-muted">{clientStatus?.process_name || stateLabel(clientState)}{clientStatus?.pid != null ? ` · PID ${clientStatus.pid}` : ''}{clientStatus?.pm2_id != null ? ` · PM2 ${clientStatus.pm2_id}` : ''}</span>
+                    </button></div>;
+                  })}
+                </div>
+              </div>
+            </>
+          )}
+        <div data-testid="module-updates" aria-label="Modules" inert={!modulesInteractive} aria-hidden={!modulesInteractive} className={`min-w-0 transition-[max-height,opacity] duration-300 ease-in-out xl:flex xl:min-h-0 xl:flex-1 xl:flex-col ${clientAccordionOpen ? 'max-h-0 overflow-hidden opacity-0' : 'max-h-[4000px] border-t border-border-subtle pt-4 opacity-100'}`}>
+          <div id="odoo-modules-content" data-testid="module-content" aria-hidden={!modulesInteractive} className={`min-h-0 transition-[max-height,opacity] duration-300 ease-in-out xl:flex xl:min-h-0 xl:flex-1 xl:flex-col ${modulesInteractive ? 'max-h-none overflow-visible opacity-100' : 'max-h-0 overflow-hidden opacity-0'}`}>
+            <h3 className="mt-1 flex items-center gap-1.5 text-sm font-semibold text-text">Modules</h3>
             {startMode !== 'client' ? <div data-testid="module-mode-notice" role="status" aria-live="polite" className="mt-2 inline-flex max-w-full items-start gap-1.5 rounded-full border px-2.5 py-1 text-xs" style={{ color: 'var(--color-warning)', borderColor: 'var(--color-warning)', backgroundColor: 'color-mix(in srgb, var(--color-warning) 10%, transparent)' }}><AlertTriangle aria-hidden="true" size={14} className="mt-0.5 shrink-0" /><span>Module updates are available only in Client mode.</span></div> : null}
             <div data-testid="module-list" className="mt-3 flex min-h-0 flex-col gap-1.5 overflow-y-auto pr-1 xl:flex-1">
               <div className={`relative box-border flex min-h-[48px] w-full min-w-0 max-w-full shrink-0 items-center gap-2 rounded-lg border px-3 py-2 transition-colors ${allModulesSelected ? 'border-border-subtle bg-accent-subtle' : 'border-border-subtle bg-surface'}`}><span className="min-w-0 truncate text-sm font-semibold text-accent">ALL</span><span className="min-w-0 flex-1 truncate text-xs text-text-muted">All installed modules</span><MissionControlToggle checked={allModulesSelected} disabled={!eligible || !moduleReadConfirmed || busy || startMode !== 'client'} label="Select all installed modules" onChange={onAllToggle} /></div>
@@ -184,7 +214,9 @@ export function OdooWorkspace({
               </article>; })}
             </div>
             {!eligible || !moduleReadConfirmed ? <p className="mt-2 text-xs text-text-muted">Module updates require a confirmed Client runtime and database.</p> : null}
-          </Panel>
+          </div>
+        </div>
+        </Panel>
         </div>
 
         <Panel testId="odoo-logs" title="Log" showHeading={false} className="min-w-0 w-full xl:flex xl:h-full xl:min-h-0 xl:flex-col">
