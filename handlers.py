@@ -225,7 +225,7 @@ def list_modules(client: str) -> dict[str, Any]:
     return _success("modules.list", {
         "client": client,
         "modules": [
-            {**asdict(item), "dependencies": list(item.dependencies)}
+            {key: value for key, value in {**asdict(item), "dependencies": list(item.dependencies)}.items() if value is not None or key in {"version", "installable"}}
             for item in _read(lambda adapter: adapter.list_modules(client))
         ],
     })
@@ -516,12 +516,13 @@ def _selected_modules(values: Any) -> list[dict[str, Any]]:
     if len(values) > _MAX_MODULES:
         raise PollingError(503, "SNAPSHOT_TOO_LARGE", "The snapshot is too large.")
     for item in values:
-        _snapshot_check_texts((item.name, item.version, *item.dependencies))
+        _snapshot_check_texts((item.name, getattr(item, "display_name", None), item.version, *item.dependencies))
         if len(item.dependencies) > _MAX_DEPENDENCIES:
             raise PollingError(503, "SNAPSHOT_TOO_LARGE", "The snapshot is too large.")
     return [
         {
             "name": item.name,
+            **({"display_name": getattr(item, "display_name", None)} if getattr(item, "display_name", None) is not None else {}),
             "version": item.version,
             "installed": item.installed,
             "installable": item.installable,

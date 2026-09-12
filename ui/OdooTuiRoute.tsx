@@ -109,8 +109,10 @@ function validControl(value: unknown): value is OdooControl {
 
 function validModules(value: unknown): value is OdooModule[] {
   return Array.isArray(value) && value.length <= MAX_MODULES && value.every((item) => isRecord(item)
-    && Object.keys(item).sort().join(',') === 'dependencies,installable,installed,name,update_available,version'
-    && isNonEmptyString(item.name) && withinStringLimit(item.name) && isNullableString(item.version) && withinStringLimit(item.version) && typeof item.installed === 'boolean'
+    && Object.keys(item).every((key) => ['dependencies', 'display_name', 'installable', 'installed', 'name', 'update_available', 'version'].includes(key))
+    && ['dependencies', 'installable', 'installed', 'name', 'update_available', 'version'].every((key) => Object.prototype.hasOwnProperty.call(item, key))
+    && isNonEmptyString(item.name) && withinStringLimit(item.name) && (item.display_name === undefined || (isNonEmptyString(item.display_name) && withinStringLimit(item.display_name)))
+    && isNullableString(item.version) && withinStringLimit(item.version) && typeof item.installed === 'boolean'
     && (item.installable === null || typeof item.installable === 'boolean') && typeof item.update_available === 'boolean'
     && Array.isArray(item.dependencies) && item.dependencies.length <= MAX_DEPENDENCIES && item.dependencies.every((dep) => isNonEmptyString(dep) && withinStringLimit(dep)))
     && new Set(value.map((item) => item.name)).size === value.length;}
@@ -210,7 +212,7 @@ function sanitizeControl(control: OdooControl): OdooControl {
 }
 
 function sanitizeModules(modules: OdooModule[]): OdooModule[] {
-  return modules.map(({ name, version, installed, installable, update_available, dependencies }) => ({ name, version, installed, installable, update_available, dependencies: [...dependencies] }));
+  return modules.map(({ name, display_name, version, installed, installable, update_available, dependencies }) => ({ name, ...(display_name !== undefined ? { display_name } : {}), version, installed, installable, update_available, dependencies: [...dependencies] }));
 }
 
 function sanitizeDatabases(databases: OdooDatabase[]): OdooDatabase[] {

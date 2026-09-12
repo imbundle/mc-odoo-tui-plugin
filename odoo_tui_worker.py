@@ -1,6 +1,6 @@
 """Read-only worker executed by the fixed odoo-tui interpreter."""
 from __future__ import annotations
-import json, re, sys
+import ast, json, re, sys
 from pathlib import Path
 from typing import Any
 
@@ -8,6 +8,17 @@ _PROTOCOL_VERSION = 1
 _CONFIG_PATH = Path("/home/cyclone/Developer/ODOO/runtime/tools/odoo-tui/config/odoo-tui.yaml")
 _ALLOWED_OPERATIONS = frozenset({"clients.list", "releases.list", "instance.identity", "runtime.status", "runtime.control", "modules.list", "databases.list"})
 _CLIENT_RE = re.compile(r"^[a-z0-9][a-z0-9_]*$")
+
+
+def _manifest_display_name(manifest: Path, technical_name: str) -> str:
+    try:
+        data = ast.literal_eval(manifest.read_text(encoding="utf-8"))
+    except (OSError, SyntaxError, ValueError):
+        return technical_name
+    if not isinstance(data, dict):
+        return technical_name
+    display_name = data.get("name")
+    return display_name.strip()[:160] if isinstance(display_name, str) and display_name.strip() else technical_name
 
 
 def _error(operation: str | None, code: str, message: str) -> dict[str, Any]:
@@ -110,7 +121,7 @@ def _read(request: dict[str, Any]) -> dict[str, Any]:
             client_modules = {name: info for name, info in catalog.modules.items() if info.manifest.resolve().is_relative_to(client_root)}
             # Exactly one module-state read for the selected client.
             states = postgres.module_states(selection.database_hint, tuple(client_modules)) if selection.database_hint else {}
-            data = {"client": selection.client.name, "modules": [{"name": info.name, "version": info.version,
+            data = {"client": selection.client.name, "modules": [{"name": info.name, "display_name": _manifest_display_name(info.manifest, info.name), "version": info.version,
                 "installed": states.get(name) == "installed", "installable": info.installable,
                 "update_available": False, "dependencies": list(info.depends)} for name, info in sorted(client_modules.items())]}
         else:

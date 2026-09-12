@@ -1,5 +1,5 @@
 import React from 'react';
-import { Activity, AlertTriangle, Check, ChevronDown, Database as DatabaseIcon, GitBranch, Info, ListTree, Minus, Package, Play, RefreshCw, RotateCcw, ScrollText, Server, Settings2, Square } from 'lucide-react';
+import { Activity, AlertTriangle, ChevronDown, Database as DatabaseIcon, GitBranch, Info, ListTree, Package, Play, RefreshCw, RotateCcw, ScrollText, Server, Settings2, Square } from 'lucide-react';
 import { Button } from './Button';
 import type { OdooClient, OdooControl, OdooDatabase, SafeOdooIdentity, OdooModule, OdooStatus, OdooWorkspaceData, RuntimeState, StartMode } from './types';
 
@@ -54,13 +54,20 @@ function logLevelClass(level: string | null): string {
   return '!bg-sky-500/15 !text-sky-300 !border !border-sky-400/35';
 }
 
-function Panel({ testId, title, icon, children, className = '' }: { testId: string; title: string; icon?: React.ReactNode; children: React.ReactNode; className?: string }) {
+function Panel({ testId, title, icon, children, className = '', showHeading = true }: { testId: string; title: React.ReactNode; icon?: React.ReactNode; children: React.ReactNode; className?: string; showHeading?: boolean }) {
   return (
-    <section data-testid={testId} aria-labelledby={`${testId}-heading`} className={`card box-border min-w-0 max-w-full overflow-visible rounded-[var(--control-radius)] border border-border bg-surface-raised p-3 sm:p-4 ${className}`}>
-      <h2 id={`${testId}-heading`} className="flex items-center gap-1.5 text-sm font-semibold text-text">{icon}{title}</h2>
+    <section data-testid={testId} aria-labelledby={showHeading ? `${testId}-heading` : undefined} aria-label={!showHeading ? (typeof title === 'string' ? title : testId) : undefined} className={`card box-border min-w-0 max-w-full overflow-visible rounded-[var(--control-radius)] border border-border bg-surface-raised p-3 sm:p-4 ${className}`}>
+      {showHeading ? <h2 id={`${testId}-heading`} className="flex items-center gap-1.5 text-sm font-semibold text-text">{icon}{title}</h2> : null}
       {children}
     </section>
   );
+}
+
+function MissionControlToggle({ checked, disabled, label, onChange }: { checked: boolean; disabled: boolean; label: string; onChange: (checked: boolean) => void }) {
+  return <label className="relative inline-flex h-11 w-11 shrink-0 cursor-pointer select-none items-center justify-end" title={label}>
+    <input type="checkbox" className="peer sr-only" aria-label={label} checked={checked} disabled={disabled} onChange={(event) => onChange(event.target.checked)} />
+    <span className="relative block h-5 w-9 rounded-full bg-border transition-colors duration-200 peer-checked:bg-accent peer-focus-visible:ring-2 peer-focus-visible:ring-accent/60 after:absolute after:inset-y-0 after:my-auto after:left-0.5 after:h-3.5 after:w-3.5 after:rounded-full after:bg-white after:transition-transform after:duration-200 peer-checked:after:translate-x-[calc(100%+2px)] peer-disabled:cursor-not-allowed peer-disabled:opacity-40" />
+  </label>;
 }
 
 function StateNotice({ state, error, onRefresh }: Pick<OdooWorkspaceProps, 'state' | 'error' | 'onRefresh'>) {
@@ -129,7 +136,6 @@ export function OdooWorkspace({
   const modules: OdooModule[] = data.modules ?? [];
   const selectableModuleNames = new Set(modules.filter((module) => module.installed && module.installable !== false).map((module) => module.name));
   const selectedSelectableModules = new Set([...selectedModules].filter((name) => selectableModuleNames.has(name)));
-  const allModulesPartiallySelected = !allModulesSelected && selectedSelectableModules.size > 0;
   const databases: OdooDatabase[] = data.databases ?? [];
   const confirmedDatabase = databases.filter((database) => database.exists);
   const releaseMismatch = Boolean(selectedClient && identity && selectedClient.release && identity.release !== selectedClient.release);
@@ -143,7 +149,7 @@ export function OdooWorkspace({
       {state !== 'ready' ? <StateNotice state={state} error={error} onRefresh={onRefresh} /> : null}
       {state === 'ready' && (!readModelConfirmed || !moduleReadConfirmed) ? <p data-testid="odoo-tui-stale-indicator" role="status" aria-live="polite" className="text-xs text-text-muted">Some Odoo data is being refreshed; affected actions remain disabled until confirmed.</p> : null}
 
-      <Panel testId="client-selection" title="Instance" icon={<Server aria-hidden="true" size={15} className="text-text-muted" />}>
+      <Panel testId="client-selection" title="Instance" showHeading={false}>
         {data.clients.length === 0 ? <p className="mt-2 text-sm text-text-muted">No registered Odoo clients are available.</p> : (
           <>
             <div className="flex flex-wrap items-end gap-2">
@@ -154,56 +160,52 @@ export function OdooWorkspace({
                 </div> : null}
               </div>
             </div>
-            <div className="mt-3 grid min-w-0 gap-3 xl:grid-cols-[auto_auto_minmax(0,1fr)] xl:items-start">
-              <div data-testid="instance-info" className="order-2 min-w-0 border-t border-border-subtle pt-2 text-xs xl:order-3 xl:border-t-0 xl:pt-0">
-                <h3 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.12em] text-text-muted"><Info aria-hidden="true" size={14} />Info</h3>
-                <div className="mt-2 flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-surface-sunken px-2 py-1"><Server aria-hidden="true" className="h-3.5 w-3.5 text-text-muted" /><span className="text-text-muted">Odoo</span> <strong className="font-medium text-text">{identity?.release || selectedClient?.release || '?'}</strong></span>
-                  <span data-testid="database-summary" className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-full bg-surface-sunken px-2 py-1"><DatabaseIcon aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-text-muted" /><span className="shrink-0 text-text-muted">DB</span> <strong className="min-w-0 max-w-[16rem] truncate font-mono font-medium text-text">{confirmedDatabase[0]?.name || identity?.database || 'not confirmed'}</strong></span>
-                  <span data-testid="runtime-status" className="flex min-w-0 items-center gap-2 rounded-full border border-border-subtle bg-surface-sunken px-2 py-1" aria-label="Runtime status">
-                    <span data-testid="runtime-status-dot" role="img" aria-label={stateLabel(status?.state)} title={stateLabel(status?.state)} className={`inline-block h-3 w-3 shrink-0 rounded-full border border-border-subtle ${statusDotClass(status?.state)}`} />
-                    <span className="min-w-0 truncate text-text-muted">{status?.process_name || 'Process identity unavailable'}</span>
-                    {status?.pid != null ? <span className="shrink-0 text-text-muted">PID {status.pid}</span> : null}
-                    {status?.pm2_id != null ? <span className="shrink-0 text-text-muted">PM2 {status.pm2_id}</span> : null}
-                  </span>
-                </div>
-                {control?.reason ? <p className="mt-2 text-xs text-text-muted">{control.reason}</p> : null}
-                {releaseMismatch ? <p role="alert" className="mt-2 text-xs text-negative">Release mismatch. Actions disabled.</p> : null}
-              </div>
-              <div className="order-1 min-w-0 xl:order-2">
-                <h3 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.12em] text-text-muted"><Settings2 aria-hidden="true" size={14} />Mode</h3>
-                <div role="group" aria-label="Start mode" className="mt-2 flex min-w-0 max-w-full items-center gap-1.5 overflow-x-auto">
-                  {(['client', 'database_manager'] as StartMode[]).map((mode) => <button key={mode} type="button" aria-pressed={startMode === mode} disabled={busy || state !== 'ready' || online} onClick={() => onStartModeChange(mode)} className={`pill pill-button shrink-0 whitespace-nowrap ${startMode === mode ? 'nav-link-active' : 'pill-subtle'} disabled:pointer-events-none disabled:opacity-50`}>{mode === 'client' ? <ListTree aria-hidden="true" className="h-3.5 w-3.5" /> : <GitBranch aria-hidden="true" className="h-3.5 w-3.5" />} {mode === 'client' ? 'Client' : 'Database Manager'}</button>)}
-                </div>
-              </div>
-              <div data-testid="lifecycle-actions" className="order-3 border-t border-border-subtle pt-3 xl:order-1 xl:border-t-0 xl:pt-0">
-                <h3 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.12em] text-text-muted"><Activity aria-hidden="true" size={14} />Lifecycle</h3>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  <Button icon={<Play size={15} />} variant="positive" disabled={!eligible || !stopped} onClick={(event) => onLifecycle('start', event.currentTarget)}>Start</Button>
-                  <Button icon={<Square size={15} />} variant="danger" disabled={!eligible || !online} onClick={(event) => onLifecycle('stop', event.currentTarget)}>Stop</Button>
-                  <Button icon={<RotateCcw size={15} />} variant="primary" disabled={!eligible || !online || (!moduleReadConfirmed && (allModulesSelected || selectedModules.size > 0))} onClick={(event) => onLifecycle('restart', event.currentTarget)}>Restart</Button>
-                </div>
-                {!eligible ? <p className="mt-2 text-xs text-text-muted">Actions require a confirmed runtime and database.</p> : null}
-              </div>
-            </div>
           </>
         )}
       </Panel>
 
-      <div data-testid="desktop-workspace-grid" className="grid min-w-0 w-full gap-4 xl:flex-1 xl:h-full xl:min-h-0 xl:grid-cols-[minmax(16rem,0.2fr)_minmax(0,0.8fr)] xl:grid-rows-[minmax(0,1fr)] xl:items-stretch">
+      <div data-testid="desktop-workspace-grid" className="grid min-w-0 w-full gap-4 xl:flex-1 xl:h-full xl:min-h-0 xl:grid-cols-[minmax(16rem,0.2fr)_minmax(0,0.8fr)] xl:grid-rows-[minmax(0,1fr)] xl:items-stretch xl:gap-4">
         <div data-testid="desktop-left-column" className="min-w-0 space-y-4 xl:flex xl:h-full xl:min-h-0 xl:flex-col">
-          <Panel testId="module-updates" title="Modules" icon={<Package aria-hidden="true" size={15} className="text-text-muted" />} className="xl:flex xl:min-h-0 xl:flex-1 xl:flex-col">
+        <Panel testId="module-updates" title={<span className="flex min-w-0 flex-1 items-center justify-between gap-3"><span className="text-base font-semibold uppercase tracking-[0.04em]">{selectedClient?.name || 'Info'}</span><span className="shrink-0 rounded-full bg-accent-subtle px-2.5 py-1 text-xs font-medium text-accent">Odoo {identity?.release || selectedClient?.release || '?'}</span></span>} icon={<Info aria-hidden="true" size={16} className="text-text-muted" />} className="xl:flex xl:min-h-0 xl:flex-1 xl:flex-col p-4">
+          <div data-testid="instance-info" className="mt-3 pb-2 text-xs">
+            <div className="flex min-h-6 min-w-0 items-center gap-2 text-text-muted"><DatabaseIcon aria-hidden="true" size={15} className="shrink-0" /><strong data-testid="database-summary" className="min-w-0 truncate font-mono font-medium text-text">{confirmedDatabase[0]?.name || identity?.database || 'not confirmed'}</strong></div>
+            <div data-testid="runtime-status" className="mt-2 min-w-0 truncate font-mono text-xs leading-4 text-text-muted" aria-label="Runtime process">{status?.process_name || 'Process identity unavailable'}{status?.pid != null ? ` · PID ${status.pid}` : ''}{status?.pm2_id != null ? ` · PM2 ${status.pm2_id}` : ''}</div>
+            {control?.reason ? <p className="mt-2 text-xs text-text-muted">{control.reason}</p> : null}
+            {releaseMismatch ? <p role="alert" className="mt-2 text-xs text-negative">Release mismatch. Actions disabled.</p> : null}
+          </div>
+          <h3 className="mt-4 flex items-center gap-1.5 text-sm font-semibold text-text"><Package aria-hidden="true" size={15} className="text-text-muted" />Modules</h3>
             {startMode !== 'client' ? <div data-testid="module-mode-notice" role="status" aria-live="polite" className="mt-2 inline-flex max-w-full items-start gap-1.5 rounded-full border px-2.5 py-1 text-xs" style={{ color: 'var(--color-warning)', borderColor: 'var(--color-warning)', backgroundColor: 'color-mix(in srgb, var(--color-warning) 10%, transparent)' }}><AlertTriangle aria-hidden="true" size={14} className="mt-0.5 shrink-0" /><span>Module updates are available only in Client mode.</span></div> : null}
-            <div data-testid="module-list" className="mt-2 flex min-h-0 flex-col gap-1 xl:flex-1 xl:overflow-y-auto xl:pr-1">
-              <label title="Update all installed modules" className={`box-border flex h-[44px] min-h-[44px] w-full min-w-0 max-w-full shrink-0 items-center gap-2 rounded-md border px-2.5 py-1 text-sm ${allModulesSelected || allModulesPartiallySelected ? 'border-accent/50 bg-accent-subtle' : 'border-border-subtle bg-surface'}`}><span className="flex min-w-0 items-center gap-2 font-semibold text-accent"><input type="checkbox" aria-label="Select all installed modules" aria-checked={allModulesPartiallySelected ? 'mixed' : allModulesSelected} checked={allModulesSelected} disabled={!eligible || !moduleReadConfirmed || busy || startMode !== 'client'} onChange={(event) => onAllToggle(event.target.checked)} ref={(element) => { if (element) element.indeterminate = allModulesPartiallySelected; }} className="peer sr-only" /><span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-[5px] border transition-colors peer-checked:border-accent peer-checked:bg-accent peer-focus-visible:ring-2 peer-focus-visible:ring-accent/60 peer-disabled:opacity-50 ${allModulesPartiallySelected ? 'border-accent bg-accent-subtle text-accent' : 'border-border-subtle bg-surface text-surface'}`}>{allModulesPartiallySelected ? <Minus aria-hidden="true" size={14} strokeWidth={3} /> : <Check aria-hidden="true" size={14} strokeWidth={3} className={allModulesSelected ? 'opacity-100' : 'opacity-0'} />}</span><span>ALL</span></span></label>
-              {modules.length === 0 ? <p className="py-1 text-sm text-text-muted">No client module catalogue is available.</p> : modules.map((module) => <label key={module.name} className={`box-border flex h-[44px] min-h-[44px] w-full min-w-0 max-w-full shrink-0 items-center justify-between gap-2 overflow-hidden rounded-md border px-2.5 py-1 text-sm transition-colors ${!module.installed || module.installable === false ? 'border-border-subtle bg-surface opacity-60 cursor-not-allowed' : selectedSelectableModules.has(module.name) ? 'border-accent/50 bg-accent-subtle' : 'border-transparent bg-surface'}`}><span className={`flex min-w-0 flex-1 items-center gap-2 overflow-hidden ${module.installed && module.installable !== false ? 'text-positive' : 'text-text-muted'}`}><input type="checkbox" aria-label={`Select module ${module.name}`} checked={selectedSelectableModules.has(module.name)} disabled={!moduleReadConfirmed || startMode !== 'client' || allModulesSelected || !module.installed || module.installable === false || busy} onChange={(event) => onModuleToggle(module.name, event.target.checked)} className="peer sr-only" /><span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-[5px] border border-border-subtle bg-surface text-surface transition-colors peer-checked:border-accent peer-checked:bg-accent peer-focus-visible:ring-2 peer-focus-visible:ring-accent/60 peer-disabled:opacity-50"><Check aria-hidden="true" size={14} strokeWidth={3} className={selectedSelectableModules.has(module.name) ? 'opacity-100' : 'opacity-0'} /></span><span className={`min-w-0 flex-1 truncate ${module.installed && module.installable !== false ? 'font-semibold' : 'font-medium'}`}>{module.name}</span></span><span className={`max-w-[40%] shrink text-right text-xs [overflow-wrap:anywhere] ${module.installed && module.installable !== false ? 'text-positive/80' : 'text-text-muted'}`}>{module.version || 'Version unknown'}</span></label>)}
+            <div data-testid="module-list" className="mt-3 flex min-h-0 flex-col gap-1.5 overflow-y-auto pr-1 xl:flex-1">
+              <div className={`relative box-border flex min-h-[48px] w-full min-w-0 max-w-full shrink-0 items-center gap-2 rounded-lg border px-3 py-2 transition-colors ${allModulesSelected ? 'border-border-subtle bg-accent-subtle' : 'border-border-subtle bg-surface'}`}><span className="min-w-0 truncate text-sm font-semibold text-accent">ALL</span><span className="min-w-0 flex-1 truncate text-xs text-text-muted">All installed modules</span><MissionControlToggle checked={allModulesSelected} disabled={!eligible || !moduleReadConfirmed || busy || startMode !== 'client'} label="Select all installed modules" onChange={onAllToggle} /></div>
+              {modules.length === 0 ? <p className="py-1 text-sm text-text-muted">No client module catalogue is available.</p> : modules.map((module) => { const selectable = module.installed && module.installable !== false; const selected = selectedSelectableModules.has(module.name); return <article key={module.name} className={`relative box-border flex min-h-[76px] w-full min-w-0 max-w-full shrink-0 items-center overflow-hidden rounded-lg border px-3 py-2 transition-colors ${!selectable ? 'border-border-subtle bg-surface opacity-60 cursor-not-allowed' : selected ? 'border-border-subtle bg-accent-subtle' : 'border-border-subtle bg-surface hover:bg-surface-raised'}`}>
+                <span className="min-w-0 flex-1 pr-16"><span className="block truncate text-sm font-semibold text-text">{module.display_name || module.name}</span><span className="mt-0.5 block truncate font-mono text-xs text-accent">{module.name}</span></span>
+                <span className="absolute right-3 top-2 rounded-full border border-border-subtle bg-surface-sunken px-1.5 py-0.5 font-mono text-[10px] tabular-nums text-text-muted">{module.version || '—'}</span>
+                <MissionControlToggle checked={selected} disabled={!moduleReadConfirmed || startMode !== 'client' || allModulesSelected || !selectable || busy} label={`Select module ${module.name}`} onChange={(checked) => onModuleToggle(module.name, checked)} />
+              </article>; })}
             </div>
             {!eligible || !moduleReadConfirmed ? <p className="mt-2 text-xs text-text-muted">Module updates require a confirmed Client runtime and database.</p> : null}
           </Panel>
         </div>
 
-        <Panel testId="odoo-logs" title="Log" icon={<ScrollText aria-hidden="true" size={15} className="text-text-muted" />} className="min-w-0 w-full xl:flex xl:h-full xl:min-h-0 xl:flex-col">
-          {!data.logs ? <p className="mt-3 text-sm text-text-muted">Odoo log is unavailable for this client.</p> : data.status?.state !== 'online' ? <p className="mt-3 text-sm text-text-muted">No Odoo log: this client is not running.</p> : data.logs.entries.length === 0 ? <p className="mt-3 text-sm text-text-muted">No Odoo log entries in the current window.</p> : <>
+        <Panel testId="odoo-logs" title="Log" showHeading={false} className="min-w-0 w-full xl:flex xl:h-full xl:min-h-0 xl:flex-col">
+          <div className="mt-2 flex min-w-0 flex-wrap items-start justify-between gap-3 pb-3">
+            <div data-testid="lifecycle-actions" className="min-w-0">
+              <h3 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.12em] text-text-muted"><Activity aria-hidden="true" size={14} />Lifecycle</h3>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <Button icon={<Play size={15} />} variant="positive" disabled={!eligible || !stopped} onClick={(event) => onLifecycle('start', event.currentTarget)}>Start</Button>
+                <Button icon={<Square size={15} />} variant="danger" disabled={!eligible || !online} onClick={(event) => onLifecycle('stop', event.currentTarget)}>Stop</Button>
+                <Button icon={<RotateCcw size={15} />} variant="primary" disabled={!eligible || !online || (!moduleReadConfirmed && (allModulesSelected || selectedModules.size > 0))} onClick={(event) => onLifecycle('restart', event.currentTarget)}>Restart</Button>
+              </div>
+            </div>
+            <div className="min-w-0">
+              <h3 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.12em] text-text-muted"><Settings2 aria-hidden="true" size={14} />Mode</h3>
+              <div role="group" aria-label="Start mode" className="mt-2 flex min-w-0 max-w-full items-center gap-1.5 overflow-x-auto">
+                {(['client', 'database_manager'] as StartMode[]).map((mode) => <button key={mode} type="button" aria-pressed={startMode === mode} disabled={busy || state !== 'ready' || online} onClick={() => onStartModeChange(mode)} className={`pill pill-button shrink-0 whitespace-nowrap ${startMode === mode ? 'nav-link-active' : 'pill-subtle'} disabled:pointer-events-none disabled:opacity-50`}>{mode === 'client' ? <ListTree aria-hidden="true" className="h-3.5 w-3.5" /> : <GitBranch aria-hidden="true" className="h-3.5 w-3.5" />} {mode === 'client' ? 'Client' : 'Database Manager'}</button>)}
+              </div>
+            </div>
+          </div>
+          {!eligible ? <p className="mt-2 text-xs text-text-muted">Actions require a confirmed runtime and database.</p> : null}
+          {!data.logs || data.status?.state !== 'online' || data.logs.entries.length === 0 ? <div data-testid="odoo-log-empty-state" className="flex min-h-[14rem] flex-1 flex-col items-center justify-center px-6 text-center"><span className="flex h-10 w-10 items-center justify-center rounded-full border border-border-subtle bg-surface-sunken text-text-muted"><ScrollText aria-hidden="true" size={18} /></span><h3 className="mt-3 text-sm font-medium text-text">No logs available</h3><p className="mt-1 max-w-xs text-xs leading-relaxed text-text-muted">Logs will appear here when this client reports activity.</p></div> : <>
             {showJumpToLatest ? <div className="mt-3 flex justify-end"><Button onClick={jumpToLatest} ariaLabel="Jump to latest Odoo log entry">Jump to latest</Button></div> : null}
             <div ref={logViewportRef} data-testid="odoo-log-viewport" aria-label="Odoo log entries" onScroll={handleLogScroll} className="mt-3 min-h-[10rem] max-h-[min(28rem,calc(100dvh-12rem))] xl:max-h-none xl:flex-1 xl:min-h-0 min-w-0 overflow-y-auto overscroll-contain pr-1"><div className="grid gap-2">{data.logs.entries.map((entry, index) => <article key={`${entry.timestamp ?? 'unknown'}-${entry.pid ?? 'nopid'}-${index}`} className="box-border min-w-0 max-w-full rounded-lg border border-border-subtle p-3 overflow-hidden"><div className="flex flex-wrap items-center gap-1.5 text-[11px]"><span className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ${logLevelClass(entry.level)}`}>{entry.level ?? 'INFO'}</span><time className="inline-flex shrink-0 items-center rounded-full border border-border bg-surface px-2.5 py-0.5 font-mono text-xs tabular-nums text-text-muted" dateTime={entry.timestamp ?? undefined}>{formatLogTimestamp(entry.timestamp)}</time></div><p className="mt-2 whitespace-pre-wrap break-words font-mono text-xs leading-relaxed text-text">{entry.message}</p></article>)}</div></div>
           </>}

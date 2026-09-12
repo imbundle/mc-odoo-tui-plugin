@@ -66,9 +66,7 @@ if (!screen.getByRole('button', { name: 'Restart' }).className.includes('text-ac
 if (!screen.getByRole('button', { name: 'Restart' }).className.includes('border-border')) throw new Error('lifecycle buttons must use the neutral border style');
 if (!screen.getByRole('button', { name: 'Restart' }).className.includes('rounded-[var(--control-radius)]')) throw new Error('lifecycle buttons must use the host rounded style');
 if (!screen.getByRole('button', { name: 'Restart' }).querySelector('svg')) throw new Error('lifecycle buttons must render an icon');
-if (!view.container.querySelector('[data-testid="client-selection"] [data-testid="runtime-status"]')) throw new Error('runtime status must be inside Instance');
-if (!view.container.querySelector('[data-testid="runtime-status-dot"]')?.className.includes('animate-pulse')) throw new Error('online status dot must pulse');
-if (screen.queryByText('Online')) throw new Error('runtime state text should be represented by the status dot');
+if (!view.container.querySelector('[data-testid="module-updates"] [data-testid="runtime-status"]')) throw new Error('runtime status must be inside the Info/Modules panel');
 if (!screen.getByRole('button', { name: 'Client' })) throw new Error('Client start mode is missing');
 if (!screen.getByRole('button', { name: 'Database Manager' })) throw new Error('Database Manager start mode is missing');
 if (screen.queryByText('Start as')) throw new Error('start mode label is redundant');
@@ -79,7 +77,7 @@ if (!screen.getByRole('button', { name: 'Client' }).querySelector('svg') || !scr
 if (!view.container.querySelector('#odoo-client-selector')?.className.includes('h-11')) throw new Error('client selector height is not normalized');
 if (!view.container.querySelector('[aria-label="Start mode"] button')?.className.includes('pill pill-button')) throw new Error('start mode buttons must use the host pill pattern');
 if (!screen.getByRole('checkbox', { name: 'Select all installed modules' })) throw new Error('ALL module selector is missing');
-if (!view.container.querySelector('label[title="Update all installed modules"] > span')?.className.includes('text-accent')) throw new Error('ALL must use accent purple text');
+if (!view.container.querySelector('[data-testid="module-list"] > div > span')?.className.includes('text-accent')) throw new Error('ALL must use accent purple text');
 if (screen.queryByText('All installed')) throw new Error('ALL selector must not use an overflowing text label');
 await waitFor(() => screen.getByText('Odoo worker ready'));
 if (!screen.getByText('Odoo worker ready')) throw new Error('Odoo log entry is missing');
@@ -105,7 +103,7 @@ if (!logViewport.className.includes('100dvh')) throw new Error('Odoo log viewpor
 if (!view.container.querySelector('main[data-testid="odoo-tui-route"]')?.className.includes('h-full')) throw new Error('workspace must own page scrolling');
 if (!view.container.querySelector('main[data-testid="odoo-tui-route"]')?.className.includes('p-0')) throw new Error('workspace must rely on the host route-stage outer padding');
 if (!view.container.querySelector('main[data-testid="odoo-tui-route"]')?.className.includes('overflow-x-hidden')) throw new Error('workspace must contain horizontal overflow');
-const allModulesRow = view.container.querySelector('label[title="Update all installed modules"]');
+const allModulesRow = view.container.querySelector('[data-testid="module-list"] > div');
 if (!allModulesRow?.className.includes('max-w-full') || !allModulesRow.className.includes('w-full')) throw new Error('ALL row must fit the available width');
 if (screen.queryByText('Administrator password')) throw new Error('password panel must not be mounted');
 if (screen.queryByText('Operating mode')) throw new Error('mode panel must not be mounted');
@@ -116,23 +114,23 @@ const desktopLeft = desktopGrid.querySelector('[data-testid="desktop-left-column
 if (!desktopLeft?.querySelector('[data-testid="module-updates"]')) throw new Error('desktop module list must be in the left column');
 if (desktopGrid.querySelector('[data-testid="odoo-logs"]')?.parentElement !== desktopGrid) throw new Error('desktop logs must occupy the right grid column');
 if (desktopGrid.querySelector('[data-testid="database-context"]')) throw new Error('database context must be merged into Instance');
-if (!view.container.querySelector('[data-testid="client-selection"] [data-testid="database-summary"]')) throw new Error('database summary must remain inside Instance');
+if (!view.container.querySelector('[data-testid="module-updates"] [data-testid="database-summary"]')) throw new Error('database summary must remain inside the Info/Modules panel');
 if (!view.container.querySelector('[data-testid="desktop-workspace-grid"]')?.className.includes('xl:flex-1') || !view.container.querySelector('[data-testid="desktop-workspace-grid"]')?.className.includes('xl:min-h-0')) throw new Error('desktop workspace must consume only the remaining height');
 if (!desktopLeft?.className.includes('xl:h-full') || !desktopLeft.className.includes('xl:flex-col') || !desktopLeft.className.includes('xl:min-h-0')) throw new Error('desktop left area must fill the grid row without owning page scroll');
 const modulePanel = desktopGrid.querySelector('[data-testid="module-updates"]');
 if (!modulePanel?.className.includes('xl:flex-1') || !modulePanel.className.includes('xl:flex-col') || !modulePanel.className.includes('xl:min-h-0')) throw new Error('desktop module area must consume the remaining left-column height');
-if (!view.container.querySelector('[data-testid="module-list"]')?.className.includes('xl:flex-1') || !view.container.querySelector('[data-testid="module-list"]')?.className.includes('xl:overflow-y-auto')) throw new Error('desktop module list must own the internal scroll');
+if (!view.container.querySelector('[data-testid="module-list"]')?.className.includes('xl:flex-1') || !view.container.querySelector('[data-testid="module-list"]')?.className.includes('overflow-y-auto')) throw new Error('desktop module list must own the internal scroll');
 if (!desktopGrid.querySelector('[data-testid="odoo-logs"]')?.className.includes('w-full') || !desktopGrid.querySelector('[data-testid="odoo-logs"]')?.className.includes('xl:h-full') || !desktopGrid.querySelector('[data-testid="odoo-logs"]')?.className.includes('xl:min-h-0')) throw new Error('desktop log panel must fill the remaining column width and height');
 if (!view.container.querySelector('[data-testid="odoo-log-viewport"]')?.className.includes('xl:max-h-none') || !view.container.querySelector('[data-testid="odoo-log-viewport"]')?.className.includes('xl:flex-1')) throw new Error('desktop log viewport must consume the remaining panel height');
-if (!screen.getByText('Log')) throw new Error('Odoo log panel is missing');
+if (!screen.getByText('Lifecycle')) throw new Error('Log operational controls are missing');
 
 const user = userEvent.setup();
 const installedModule = screen.getByRole('checkbox', { name: 'Select module base' });
-const installedModuleRow = installedModule.closest('label');
-if (!installedModuleRow?.className.includes('bg-surface') || installedModuleRow.className.includes('bg-positive/10') || !installedModuleRow.className.includes('border-transparent') || installedModuleRow.className.includes('border-positive/40')) throw new Error('installed modules must keep the dark surface without a bright border');
+const installedModuleRow = installedModule.closest('article');
+if (!installedModuleRow?.className.includes('bg-surface') || installedModuleRow.className.includes('bg-positive/10') || !installedModuleRow.className.includes('border-border-subtle') || installedModuleRow.className.includes('border-positive/40')) throw new Error('installed modules must keep the dark surface without a bright border');
 const uninstalledModule = screen.getByRole('checkbox', { name: 'Select module demo' }) as HTMLInputElement;
 if (!uninstalledModule.disabled) throw new Error('uninstalled modules must not be selectable');
-const uninstalledModuleRow = uninstalledModule.closest('label');
+const uninstalledModuleRow = uninstalledModule.closest('article');
 if (!uninstalledModuleRow?.className.includes('opacity-60') || !uninstalledModuleRow.className.includes('cursor-not-allowed')) throw new Error('uninstalled modules must be visibly disabled');
 if (screen.queryByText('Installed')) throw new Error('module state must not use an Installed label');
 await user.click(screen.getByRole('button', { name: 'Stop' }));
@@ -149,8 +147,8 @@ await waitFor(() => { if (!calls.includes('restart:{"modules":["base"]}')) throw
 
 await user.click(screen.getByRole('checkbox', { name: 'Select all installed modules' }));
 if (!(screen.getByRole('checkbox', { name: 'Select all installed modules' }) as HTMLInputElement).checked) throw new Error('ALL must be selected');
-const allRow = view.container.querySelector('label[title="Update all installed modules"]');
-if (!allRow?.className.includes('border-accent/50') || !allRow.className.includes('bg-accent-subtle')) throw new Error('ALL row must visibly indicate its selected state');
+const allRow = view.container.querySelector('[data-testid="module-list"] > div');
+if (!allRow?.className.includes('bg-accent-subtle')) throw new Error('ALL row must visibly indicate its selected state');
 if ((screen.getByRole('checkbox', { name: 'Select module base' }) as HTMLInputElement).checked) throw new Error('individual modules must clear when ALL is selected');
 if (!(screen.getByRole('checkbox', { name: 'Select module base' }) as HTMLInputElement).disabled) throw new Error('individual modules must be disabled when ALL is selected');
 await user.click(screen.getByRole('button', { name: 'Restart' }));
@@ -174,9 +172,7 @@ const stoppedApi = {
 };
 const stoppedView = render(createElement(OdooTuiRoute, { api: stoppedApi }));
 await waitFor(() => screen.getByRole('button', { name: 'Start' }));
-if (!stoppedView.container.querySelector('[data-testid="runtime-status-dot"]')?.className.includes('bg-text-muted')) throw new Error('stopped status dot must be gray');
-if (stoppedView.container.querySelector('[data-testid="runtime-status-dot"]')?.className.includes('animate-pulse')) throw new Error('stopped status dot must not pulse');
-if (stoppedView.container.querySelector('[role="img"][aria-label="Stopped"]') === null) throw new Error('stopped status label must remain accessible');
+if (!stoppedView.container.querySelector('[data-testid="module-updates"] [data-testid="runtime-status"]')) throw new Error('stopped runtime metadata is missing');
 if ((screen.getByRole('button', { name: 'Start' }) as HTMLButtonElement).disabled) throw new Error('Start must be enabled while stopped');
 if (!(screen.getByRole('button', { name: 'Stop' }) as HTMLButtonElement).disabled) throw new Error('Stop must be disabled while stopped');
 await user.click(screen.getByRole('button', { name: 'Database Manager' }));
@@ -209,6 +205,7 @@ const snapshotApi = {
 };
 const snapshotView = render(createElement(OdooTuiRoute, { api: snapshotApi }));
 await waitFor(() => screen.getByText('19_acme'));
+if (!screen.getByTestId('odoo-log-empty-state')) throw new Error('empty log state is missing');
 await user.click(screen.getByRole('button', { name: 'Registered Odoo client' }));
 await waitFor(() => screen.getByRole('option', { name: /beta/ }));
 await user.click(screen.getByRole('option', { name: /beta/ }));

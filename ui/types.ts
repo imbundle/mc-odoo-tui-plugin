@@ -38,6 +38,7 @@ export interface OdooControl {
 
 export interface OdooModule {
   name: string;
+  display_name?: string;
   version: string | null;
   installed: boolean;
   installable: boolean | null;

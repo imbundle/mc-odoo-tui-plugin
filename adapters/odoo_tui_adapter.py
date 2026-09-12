@@ -33,7 +33,7 @@ class RuntimeControl:
     reason: str | None = None
 @dataclass(frozen=True)
 class ModuleRecord:
-    name: str; version: str | None = None; installed: bool = False; installable: bool | None = None; update_available: bool = False; dependencies: tuple[str, ...] = ()
+    name: str; version: str | None = None; installed: bool = False; installable: bool | None = None; update_available: bool = False; dependencies: tuple[str, ...] = (); display_name: str | None = None
 @dataclass(frozen=True)
 class DatabaseRecord: name: str; exists: bool = True
 
@@ -61,8 +61,8 @@ def _payload(raw: str | bytes | Mapping[str, Any], operation: str) -> Mapping[st
         raise _malformed(operation, "contains an invalid error")
     return value
 
-def _keys(value: Mapping[str, Any], expected: set[str], operation: str) -> None:
-    if set(value) != expected: raise _malformed(operation, "has missing or unexpected fields")
+def _keys(value: Mapping[str, Any], expected: set[str], operation: str, *, allow_missing: set[str] = set()) -> None:
+    if not (set(value) == expected or set(value) == expected - allow_missing): raise _malformed(operation, "has missing or unexpected fields")
 def _list(payload: Mapping[str, Any], key: str, operation: str) -> list[Any]:
     _keys(payload, {key}, operation)
     if not isinstance(payload[key], list): raise _malformed(operation, f"field '{key}' is invalid")
@@ -152,13 +152,13 @@ class OdooTuiAdapter:
         if not isinstance(modules, list): raise _malformed(op, "field 'modules' is invalid")
         for x in modules:
             if not isinstance(x,Mapping): raise _malformed(op)
-            _keys(x,{"name","version","installed","installable","update_available","dependencies"},op)
+            _keys(x,{"name","version","installed","installable","update_available","dependencies","display_name"},op, allow_missing={"display_name"})
             deps=x["dependencies"]
             if not isinstance(deps,list) or any(not isinstance(d,str) or not d for d in deps): raise _malformed(op)
             name = _text(x["name"], "name", op)
             if name in seen: raise _malformed(op, "contains duplicate module names")
             seen.add(name)
-            result.append(ModuleRecord(name,_text(x["version"],"version",op,True),_bool(x["installed"],"installed",op),_bool(x["installable"],"installable",op,True),_bool(x["update_available"],"update_available",op),tuple(sorted(deps))))
+            result.append(ModuleRecord(name,_text(x["version"],"version",op,True),_bool(x["installed"],"installed",op),_bool(x["installable"],"installable",op,True),_bool(x["update_available"],"update_available",op),tuple(sorted(deps)),display_name=_text(x.get("display_name"),"display_name",op,True) if "display_name" in x else None))
         return tuple(sorted(result,key=lambda x:x.name))
     def list_databases(self, client: str):
         op="databases.list"; p=self._request(op,client=client); _keys(p,{"client","databases"},op); response_client = _text(p["client"],"client",op)
