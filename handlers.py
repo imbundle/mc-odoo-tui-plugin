@@ -4,6 +4,9 @@ from __future__ import annotations
 import threading
 import time
 import re
+import json
+import uuid
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError, wait
 from os import PathLike
 from pathlib import Path
 from collections.abc import Mapping
@@ -30,6 +33,28 @@ _read_adapter: OdooTuiAdapter | None = None
 _operation_boundary: Any | None = None
 _CLIENT_SELECTOR_RE = re.compile(r"^[a-z0-9][a-z0-9_]*$")
 _LOG_ROOT = Path("/home/cyclone/Developer/ODOO/runtime/instances").resolve()
+_SNAPSHOT_PROCESS_INSTANCE_ID = uuid.uuid4().hex
+_snapshot_composition_lock = threading.Lock()
+_snapshot_registry_key: tuple[tuple[str, str], ...] | None = None
+_snapshot_registry_epoch = 0
+_snapshot_worker_lock = threading.Lock()
+_mutation_dispatch_lock = threading.Lock()
+_snapshot_active_workers = 0
+_MAX_CLIENTS = 32
+_MAX_RELEASES = 64
+_MAX_MODULES = 500
+_MAX_DATABASES = 64
+_MAX_DEPENDENCIES = 128
+_MAX_STRING_BYTES = 512
+_MAX_IDENTITY_BYTES = 4096
+_MAX_PAYLOAD_BYTES = 256 * 1024
+_MAX_COMPOSITION_SECONDS = 12.0
+
+
+class _SnapshotTimeout(FutureTimeoutError):
+    def __init__(self, release: Any):
+        super().__init__()
+        self.release = release
 
 
 def register_read_adapter(adapter: OdooTuiAdapter) -> None:
@@ -111,6 +136,37 @@ def _require_registered_client(client: str) -> None:
         raise PollingError(404, "INSTANCE_NOT_FOUND", "The selected Odoo instance is not registered.")
 
 
+def _check_mutation_precondition_unlocked(client: str, expected: Mapping[str, Any]) -> None:
+    if set(expected) != {"registry_identity", "process_instance_id", "registry_epoch"}:
+        raise PollingError(409, "PRECONDITION_FAILED", "The selected Odoo instance changed.")
+    process_instance_id = expected["process_instance_id"]
+    registry_identity = expected["registry_identity"]
+    registry_epoch = expected["registry_epoch"]
+    if not isinstance(process_instance_id, str) or re.fullmatch(r"[0-9a-f]{32}", process_instance_id) is None:
+        raise PollingError(409, "PRECONDITION_FAILED", "The selected Odoo instance changed.")
+    if not isinstance(registry_identity, str) or len(registry_identity.encode("utf-8")) > _MAX_IDENTITY_BYTES:
+        raise PollingError(409, "PRECONDITION_FAILED", "The selected Odoo instance changed.")
+    if not isinstance(registry_epoch, int) or isinstance(registry_epoch, bool) or registry_epoch < 0:
+        raise PollingError(409, "PRECONDITION_FAILED", "The selected Odoo instance changed.")
+    registry, _collection_identity, current_epoch = _snapshot_registry(_read_model_adapter())
+    current = next((item for item in registry if item["name"] == client), None)
+    if (current is None or current["registry_identity"] != registry_identity
+        or process_instance_id != _SNAPSHOT_PROCESS_INSTANCE_ID or registry_epoch != current_epoch):
+        raise PollingError(409, "PRECONDITION_FAILED", "The selected Odoo instance changed.")
+
+
+def check_mutation_precondition(client: str, expected: Mapping[str, Any]) -> None:
+    with _snapshot_composition_lock:
+        _check_mutation_precondition_unlocked(client, expected)
+
+
+def invoke_operation(request: Mapping[str, Any], precondition: Mapping[str, Any]) -> dict[str, Any]:
+    """Validate and dispatch a mutation without releasing the target lock."""
+    with _mutation_dispatch_lock, _snapshot_composition_lock:
+        _check_mutation_precondition_unlocked(str(request["client"]), precondition)
+        return _operation_model_boundary().invoke(dict(request))
+
+
 def _read(call):
     try:
         return call(_read_model_adapter())
@@ -182,6 +238,402 @@ def list_databases(client: str) -> dict[str, Any]:
         "client": client,
         "databases": [asdict(item) for item in _read(lambda adapter: adapter.list_databases(client))],
     })
+
+
+def _snapshot_registry(adapter: OdooTuiAdapter) -> tuple[list[dict[str, Any]], str, int]:
+    global _snapshot_registry_key, _snapshot_registry_epoch
+    clients = adapter.list_clients()
+    if len(clients) > _MAX_CLIENTS:
+        raise PollingError(503, "SNAPSHOT_TOO_LARGE", "The snapshot is too large.")
+    registry: list[dict[str, Any]] = []
+    key: list[tuple[str, str]] = []
+    for item in clients:
+        for value in (item.name, item.release, item.environment, item.local_url):
+            if value is not None and len(value.encode("utf-8")) > _MAX_STRING_BYTES:
+                raise PollingError(503, "SNAPSHOT_TOO_LARGE", "The snapshot is too large.")
+        identity = json.dumps(
+            [item.name, item.release, item.environment, item.local_url],
+            separators=(",", ":"),
+            ensure_ascii=True,
+        )
+        if len(identity.encode("utf-8")) > _MAX_IDENTITY_BYTES:
+            raise PollingError(503, "SNAPSHOT_TOO_LARGE", "The snapshot is too large.")
+        registry.append({
+            "name": item.name,
+            "release": item.release,
+            "environment": item.environment,
+            "local_url": item.local_url,
+            "registry_identity": identity,
+        })
+        key.append((item.name, identity))
+    canonical_key = tuple(key)
+    if _snapshot_registry_key != canonical_key:
+        if _snapshot_registry_key is not None:
+            _snapshot_registry_epoch += 1
+        _snapshot_registry_key = canonical_key
+    registry_identity = json.dumps(
+        [[name, identity] for name, identity in canonical_key],
+        separators=(",", ":"),
+        ensure_ascii=True,
+    )
+    if len(registry_identity.encode("utf-8")) > _MAX_IDENTITY_BYTES:
+        raise PollingError(503, "SNAPSHOT_TOO_LARGE", "The snapshot is too large.")
+    return registry, registry_identity, _snapshot_registry_epoch
+
+
+def _snapshot_error_code(error: Exception, capability: str) -> str:
+    if isinstance(error, FutureTimeoutError):
+        return "SNAPSHOT_TIMEOUT"
+    code = getattr(error, "transport_code", None) or getattr(error, "code", "")
+    if code == "MALFORMED_RESPONSE":
+        return "MALFORMED_BACKEND_RESPONSE"
+    if code == "OUTPUT_TOO_LARGE":
+        return "SNAPSHOT_TOO_LARGE"
+    if code == "STATUS_PROBE_FAILED":
+        return {
+            "status": "STATUS_UNAVAILABLE",
+            "modules": "MODULES_UNAVAILABLE",
+            "databases": "DATABASES_UNAVAILABLE",
+        }.get(capability, "SNAPSHOT_UNAVAILABLE")
+    if capability == "registry":
+        return "REGISTRY_UNAVAILABLE"
+    return {
+        "releases": "RELEASES_UNAVAILABLE",
+        "identity": "IDENTITY_UNAVAILABLE",
+        "status": "STATUS_UNAVAILABLE",
+        "control": "CONTROL_UNAVAILABLE",
+        "modules": "MODULES_UNAVAILABLE",
+        "databases": "DATABASES_UNAVAILABLE",
+    }.get(capability, "SNAPSHOT_UNAVAILABLE")
+
+
+def _snapshot_phase_timeout(deadline: float, budget: float) -> float:
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        raise PollingError(503, "SNAPSHOT_TIMEOUT", "The snapshot timed out.")
+    return min(remaining, budget)
+
+
+def _snapshot_json_size(payload: dict[str, Any]) -> int:
+    return len(json.dumps(payload).encode("utf-8"))
+
+
+def _snapshot_releases(values: Any) -> list[dict[str, str]]:
+    if len(values) > _MAX_RELEASES:
+        raise PollingError(503, "SNAPSHOT_TOO_LARGE", "The snapshot is too large.")
+    result = []
+    for item in values:
+        if len(item.version.encode("utf-8")) > _MAX_STRING_BYTES:
+            raise PollingError(503, "SNAPSHOT_TOO_LARGE", "The snapshot is too large.")
+        result.append({"version": item.version})
+    return result
+
+
+def _snapshot_check_texts(values: Any) -> None:
+    for value in values:
+        if value is not None and len(value.encode("utf-8")) > _MAX_STRING_BYTES:
+            raise PollingError(503, "SNAPSHOT_TOO_LARGE", "The snapshot is too large.")
+
+
+def _snapshot_adapter() -> OdooTuiAdapter:
+    try:
+        return _read_model_adapter()
+    except PollingError as error:
+        if error.code == "ADAPTER_UNAVAILABLE":
+            raise PollingError(503, "REGISTRY_UNAVAILABLE", "The client registry is unavailable.") from error
+        raise
+
+
+def _snapshot_worker_call(executor: ThreadPoolExecutor, operation: Any):
+    global _snapshot_active_workers
+    with _snapshot_worker_lock:
+        _snapshot_active_workers += 1
+    try:
+        future = executor.submit(_snapshot_worker_wrapper, operation)
+        future.add_done_callback(_snapshot_worker_finished)
+        return future
+    except Exception:
+        with _snapshot_worker_lock:
+            _snapshot_active_workers -= 1
+        raise
+
+
+def _snapshot_worker_finished(_future: Any) -> None:
+    global _snapshot_active_workers
+    with _snapshot_worker_lock:
+        _snapshot_active_workers = max(0, _snapshot_active_workers - 1)
+
+
+def _snapshot_worker_wrapper(operation: Any):
+    return operation()
+
+
+def _snapshot_has_active_workers() -> bool:
+    with _snapshot_worker_lock:
+        return _snapshot_active_workers > 0
+
+
+def _snapshot_defer_lock_release(futures: Any) -> Any:
+    pending = list(futures)
+    state_lock = threading.Lock()
+    released = False
+    allowed = False
+
+    def release_when_done(_future: Any = None) -> None:
+        nonlocal released
+        with state_lock:
+            if not allowed or released or not all(future.done() for future in pending):
+                return
+            released = True
+        _snapshot_composition_lock.release()
+
+    for future in pending:
+        future.add_done_callback(release_when_done)
+
+    def allow_release() -> None:
+        nonlocal allowed
+        with state_lock:
+            allowed = True
+        release_when_done()
+
+    return allow_release
+
+
+def _snapshot_bounded_call(operation: Any, timeout: float):
+    executor = ThreadPoolExecutor(max_workers=1)
+    future = _snapshot_worker_call(executor, operation)
+    try:
+        done, _ = wait((future,), timeout=timeout)
+        if not done:
+            release = _snapshot_defer_lock_release((future,))
+            raise _SnapshotTimeout(release)
+        return future.result()
+    finally:
+        executor.shutdown(wait=False, cancel_futures=True)
+
+
+def snapshot_collection() -> dict[str, Any]:
+    if not _snapshot_composition_lock.acquire(blocking=False):
+        raise PollingError(503, "SNAPSHOT_BUSY", "The snapshot is busy.")
+    if _snapshot_has_active_workers():
+        _snapshot_composition_lock.release()
+        raise PollingError(503, "SNAPSHOT_BUSY", "The snapshot is busy.")
+    defer_lock_release = False
+    allow_deferred_release: Any | None = None
+    composition_deadline = time.monotonic() + _MAX_COMPOSITION_SECONDS
+    try:
+        adapter = _snapshot_adapter()
+        try:
+            registry, registry_identity, epoch = _snapshot_bounded_call(lambda: _snapshot_registry(adapter), _snapshot_phase_timeout(composition_deadline, 5.0))
+        except PollingError:
+            raise
+        except _SnapshotTimeout as error:
+            defer_lock_release = True
+            allow_deferred_release = error.release
+            raise PollingError(503, "SNAPSHOT_TIMEOUT", "The snapshot timed out.") from error
+        except FutureTimeoutError as error:
+            raise PollingError(503, "SNAPSHOT_TIMEOUT", "The snapshot timed out.") from error
+        except AdapterError as error:
+            if getattr(error, "transport_code", None) == "OUTPUT_TOO_LARGE":
+                raise PollingError(503, "SNAPSHOT_TOO_LARGE", "The snapshot is too large.") from error
+            raise PollingError(503, "REGISTRY_UNAVAILABLE", "The client registry is unavailable.") from error
+        except Exception as error:
+            raise PollingError(503, "REGISTRY_UNAVAILABLE", "The client registry is unavailable.") from error
+        releases: list[dict[str, Any]] = []
+        releases_error: dict[str, str] | None = None
+        executor = ThreadPoolExecutor(max_workers=1)
+        future = _snapshot_worker_call(executor, adapter.list_releases)
+        try:
+            done, _ = wait((future,), timeout=max(0.0, min(5.5, composition_deadline - time.monotonic())))
+            if not done:
+                raise FutureTimeoutError()
+            releases = _snapshot_releases(future.result())
+        except PollingError:
+            raise
+        except Exception as error:
+            if isinstance(error, FutureTimeoutError):
+                defer_lock_release = True
+                allow_deferred_release = _snapshot_defer_lock_release((future,))
+            releases_error = {"code": _snapshot_error_code(error, "releases")}
+        finally:
+            executor.shutdown(wait=False, cancel_futures=True)
+        _snapshot_phase_timeout(composition_deadline, float("inf"))
+        payload = {
+            "protocol_version": 1,
+            "process_instance_id": _SNAPSHOT_PROCESS_INSTANCE_ID,
+            "registry_epoch": epoch,
+            "registry_identity": registry_identity,
+            "clients": registry,
+            "releases": releases,
+            "releases_error": releases_error,
+            "errors": {},
+        }
+        if _snapshot_json_size(payload) > _MAX_PAYLOAD_BYTES:
+            raise PollingError(503, "SNAPSHOT_TOO_LARGE", "The snapshot is too large.")
+        _snapshot_phase_timeout(composition_deadline, float("inf"))
+        return payload
+    finally:
+        if defer_lock_release:
+            if allow_deferred_release is not None:
+                allow_deferred_release()
+        else:
+            _snapshot_composition_lock.release()
+
+
+def _selected_identity(value: Any) -> dict[str, Any]:
+    _snapshot_check_texts((value.client, value.release, value.environment, value.database))
+    return {
+        "client": value.client,
+        "release": value.release,
+        "environment": value.environment,
+        "database": value.database,
+        "http_port": value.http_port,
+        "longpolling_port": value.longpolling_port,
+    }
+
+
+def _selected_status(value: Any) -> dict[str, Any]:
+    _snapshot_check_texts((value.state, value.process_name, value.startup_mode))
+    return {
+        "state": value.state,
+        "pid": value.pid,
+        "process_name": value.process_name,
+        "pm2_id": value.pm2_id,
+        "startup_mode": value.startup_mode,
+    }
+
+
+def _selected_control(value: Any) -> dict[str, Any]:
+    _snapshot_check_texts((value.control_mode, value.reason))
+    return {
+        "control_mode": value.control_mode,
+        "lifecycle_eligible": value.lifecycle_eligible,
+        "reason": value.reason,
+    }
+
+
+def _selected_modules(values: Any) -> list[dict[str, Any]]:
+    if len(values) > _MAX_MODULES:
+        raise PollingError(503, "SNAPSHOT_TOO_LARGE", "The snapshot is too large.")
+    for item in values:
+        _snapshot_check_texts((item.name, item.version, *item.dependencies))
+        if len(item.dependencies) > _MAX_DEPENDENCIES:
+            raise PollingError(503, "SNAPSHOT_TOO_LARGE", "The snapshot is too large.")
+    return [
+        {
+            "name": item.name,
+            "version": item.version,
+            "installed": item.installed,
+            "installable": item.installable,
+            "update_available": item.update_available,
+            "dependencies": list(item.dependencies),
+        }
+        for item in values
+    ]
+
+
+def _selected_databases(values: Any) -> list[dict[str, Any]]:
+    if len(values) > _MAX_DATABASES:
+        raise PollingError(503, "SNAPSHOT_TOO_LARGE", "The snapshot is too large.")
+    for item in values:
+        _snapshot_check_texts((item.name,))
+    return [{"name": item.name, "exists": item.exists} for item in values]
+
+
+def snapshot_selected(client: str) -> dict[str, Any]:
+    if not _snapshot_composition_lock.acquire(blocking=False):
+        raise PollingError(503, "SNAPSHOT_BUSY", "The snapshot is busy.")
+    if _snapshot_has_active_workers():
+        _snapshot_composition_lock.release()
+        raise PollingError(503, "SNAPSHOT_BUSY", "The snapshot is busy.")
+    defer_lock_release = False
+    allow_deferred_release: Any | None = None
+    composition_deadline = time.monotonic() + _MAX_COMPOSITION_SECONDS
+    try:
+        adapter = _snapshot_adapter()
+        try:
+            registry, registry_identity, epoch = _snapshot_bounded_call(lambda: _snapshot_registry(adapter), _snapshot_phase_timeout(composition_deadline, 5.0))
+        except PollingError:
+            raise
+        except _SnapshotTimeout as error:
+            defer_lock_release = True
+            allow_deferred_release = error.release
+            raise PollingError(503, "SNAPSHOT_TIMEOUT", "The snapshot timed out.") from error
+        except FutureTimeoutError as error:
+            raise PollingError(503, "SNAPSHOT_TIMEOUT", "The snapshot timed out.") from error
+        except AdapterError as error:
+            if getattr(error, "transport_code", None) == "OUTPUT_TOO_LARGE":
+                raise PollingError(503, "SNAPSHOT_TOO_LARGE", "The snapshot is too large.") from error
+            raise PollingError(503, "REGISTRY_UNAVAILABLE", "The client registry is unavailable.") from error
+        except Exception as error:
+            raise PollingError(503, "REGISTRY_UNAVAILABLE", "The client registry is unavailable.") from error
+        selected = next((item for item in registry if item["name"] == client), None)
+        if selected is None:
+            raise PollingError(404, "INSTANCE_NOT_FOUND", "The selected Odoo instance is not registered.")
+        operations = {
+            "releases": lambda: adapter.list_releases(),
+            "identity": lambda: adapter.get_instance(client),
+            "status": lambda: adapter.get_status(client),
+            "control": lambda: adapter.get_control(client),
+            "modules": lambda: adapter.list_modules(client),
+            "databases": lambda: adapter.list_databases(client),
+        }
+        values: dict[str, Any] = {}
+        errors: dict[str, dict[str, dict[str, str]]] = {client: {}}
+        executor = ThreadPoolExecutor(max_workers=6)
+        futures = {name: _snapshot_worker_call(executor, operation) for name, operation in operations.items()}
+        try:
+            done, not_done = wait(tuple(futures.values()), timeout=max(0.0, min(6.0, composition_deadline - time.monotonic())))
+            if not_done:
+                defer_lock_release = True
+                allow_deferred_release = _snapshot_defer_lock_release(tuple(futures.values()))
+                raise PollingError(503, "SNAPSHOT_TIMEOUT", "The snapshot timed out.")
+            for name, future in futures.items():
+                try:
+                    if future not in done:
+                        raise FutureTimeoutError()
+                    values[name] = future.result()
+                except Exception as error:
+                    values[name] = None
+                    errors[client][name] = {"code": _snapshot_error_code(error, name)}
+        finally:
+            executor.shutdown(wait=False, cancel_futures=True)
+        releases = [] if values["releases"] is None else _snapshot_releases(values["releases"])
+        releases_error = errors[client].pop("releases", None)
+        identity_value = values["identity"]
+        if identity_value is not None and (identity_value.client != client or identity_value.environment != selected["environment"] or identity_value.release != selected["release"]):
+            values["identity"] = None
+            errors[client]["identity"] = {"code": "MALFORMED_BACKEND_RESPONSE"}
+        snapshot = {
+            "registry_identity": selected["registry_identity"],
+            "identity": None if values["identity"] is None else _selected_identity(values["identity"]),
+            "status": None if values["status"] is None else _selected_status(values["status"]),
+            "control": None if values["control"] is None else _selected_control(values["control"]),
+            "modules": None if values["modules"] is None else _selected_modules(values["modules"]),
+            "databases": None if values["databases"] is None else _selected_databases(values["databases"]),
+        }
+        _snapshot_phase_timeout(composition_deadline, float("inf"))
+        payload = {
+            "protocol_version": 1,
+            "process_instance_id": _SNAPSHOT_PROCESS_INSTANCE_ID,
+            "registry_epoch": epoch,
+            "registry_identity": registry_identity,
+            "releases": releases,
+            "releases_error": releases_error,
+            "client": client,
+            "snapshot": snapshot,
+            "errors": errors if errors[client] else {},
+        }
+        if _snapshot_json_size(payload) > _MAX_PAYLOAD_BYTES:
+            raise PollingError(503, "SNAPSHOT_TOO_LARGE", "The snapshot is too large.")
+        _snapshot_phase_timeout(composition_deadline, float("inf"))
+        return payload
+    finally:
+        if defer_lock_release:
+            if allow_deferred_release is not None:
+                allow_deferred_release()
+        else:
+            _snapshot_composition_lock.release()
 
 
 def poll_logs(

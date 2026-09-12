@@ -71,11 +71,26 @@ def _modules(value: object) -> list[str]:
     return list(value)
 
 
+def _precondition(value: object) -> dict[str, Any]:
+    if not isinstance(value, dict) or set(value) != {"registry_identity", "process_instance_id", "registry_epoch"}:
+        raise ProtocolError("precondition is invalid")
+    if not isinstance(value["registry_identity"], str) or not value["registry_identity"] or len(value["registry_identity"].encode("utf-8")) > 4096:
+        raise ProtocolError("precondition is invalid")
+    if not isinstance(value["process_instance_id"], str) or re.fullmatch(r"[0-9a-f]{32}", value["process_instance_id"]) is None:
+        raise ProtocolError("precondition is invalid")
+    if not isinstance(value["registry_epoch"], int) or isinstance(value["registry_epoch"], bool) or value["registry_epoch"] < 0:
+        raise ProtocolError("precondition is invalid")
+    return dict(value)
+
+
 def validate_request(request: object) -> dict[str, Any]:
     """Validate and return a copy of one closed operation request."""
     value = _require_common(request)
     operation = value["operation"]
     if operation in _LIFECYCLE:
+        if "precondition" not in value:
+            raise ProtocolError("precondition is required")
+        _precondition(value["precondition"])
         expected = f"{_LIFECYCLE[operation]} {value['client']}"
         if value.get("confirmation") != expected:
             raise ProtocolError("confirmation does not match operation and client")
@@ -84,6 +99,9 @@ def validate_request(request: object) -> dict[str, Any]:
                 raise ProtocolError("mode is not valid for this lifecycle operation")
         if operation == "lifecycle.restart":
             allowed = _COMMON_KEYS | {"confirmation"}
+            if "precondition" in value:
+                _precondition(value["precondition"])
+                allowed.add("precondition")
             if "mode" in value: allowed.add("mode")
             if set(value) == allowed:
                 return value
@@ -94,6 +112,9 @@ def validate_request(request: object) -> dict[str, Any]:
                 return value
             raise ProtocolError("restart request has invalid fields")
         allowed = _COMMON_KEYS | {"confirmation"}
+        if "precondition" in value:
+            _precondition(value["precondition"])
+            allowed.add("precondition")
         if "mode" in value: allowed.add("mode")
         if set(value) != allowed:
             raise ProtocolError("lifecycle request has invalid fields")
@@ -106,12 +127,15 @@ def validate_request(request: object) -> dict[str, Any]:
             return value
         raise ProtocolError("update plan must contain modules or update_all")
     if operation == "updates.apply":
-        if set(value) == _COMMON_KEYS | {"modules", "confirmation"}:
+        if "precondition" not in value:
+            raise ProtocolError("precondition is required")
+        _precondition(value["precondition"])
+        if set(value) == _COMMON_KEYS | {"modules", "confirmation", "precondition"}:
             value["modules"] = _modules(value["modules"])
             if not isinstance(value["confirmation"], str) or not value["confirmation"]:
                 raise ProtocolError("confirmation is required")
             return value
-        if set(value) == _COMMON_KEYS | {"update_all", "confirmation"} and value["update_all"] is True:
+        if set(value) == _COMMON_KEYS | {"update_all", "confirmation", "precondition"} and value["update_all"] is True:
             if not isinstance(value["confirmation"], str) or not value["confirmation"]:
                 raise ProtocolError("confirmation is required")
             return value

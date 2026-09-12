@@ -12,8 +12,8 @@ class ReadOnlyTransport(Protocol):
     def request(self, operation: str, **params: str) -> str | bytes | Mapping[str, Any]: ...
 
 class AdapterError(Exception):
-    def __init__(self, code: str, message: str, *, status_code: int = 503):
-        super().__init__(message); self.code, self.message, self.status_code = code, message, status_code
+    def __init__(self, code: str, message: str, *, status_code: int = 503, transport_code: str | None = None):
+        super().__init__(message); self.code, self.message, self.status_code, self.transport_code = code, message, status_code, transport_code
     def as_dict(self): return {"error": {"code": self.code, "message": self.message}}
 
 @dataclass(frozen=True)
@@ -87,16 +87,21 @@ class OdooTuiAdapter:
     def _request(self, operation: str, **params: str) -> Mapping[str, Any]:
         try: return _payload(self._transport.request(operation, **params), operation)
         except BridgeError as exc:
+            if exc.code == "OUTPUT_TOO_LARGE":
+                raise AdapterError("MALFORMED_RESPONSE", "The worker response is unavailable.", transport_code=exc.code) from exc
             status = 400 if exc.code in {"INVALID_REQUEST", "OPERATION_NOT_ALLOWED"} else 404 if exc.code in {"INSTANCE_NOT_FOUND", "STALE_INSTANCE_IDENTITY"} else 503
             raise AdapterError(exc.code, exc.message, status_code=status) from exc
         except AdapterError: raise
         except Exception as exc: raise AdapterError("DEPENDENCY_UNAVAILABLE", f"The {operation} read is unavailable.") from exc
     def list_clients(self):
-        op="clients.list"; result=[]
+        op="clients.list"; result=[]; seen=set()
         for item in _list(self._request(op), "clients", op):
             if not isinstance(item, Mapping): raise _malformed(op)
             _keys(item, {"name","release","environment","local_url"}, op)
-            result.append(ClientRecord(_text(item["name"],"name",op), _text(item["release"],"release",op,True), _text(item["environment"],"environment",op,True), _text(item["local_url"],"local_url",op,True)))
+            name = _text(item["name"], "name", op)
+            if name in seen: raise _malformed(op, "contains duplicate client names")
+            seen.add(name)
+            result.append(ClientRecord(name, _text(item["release"],"release",op,True), _text(item["environment"],"environment",op,True), _text(item["local_url"],"local_url",op,True)))
         return tuple(sorted(result,key=lambda x:x.name))
     def list_releases(self):
         op="releases.list"; result=[]
@@ -108,7 +113,9 @@ class OdooTuiAdapter:
         op="instance.identity"; p=self._request(op,client=client); _keys(p,{"instance"},op); x=p["instance"]
         if not isinstance(x,Mapping): raise AdapterError("STALE_INSTANCE_IDENTITY","The selected instance identity is missing or stale.",status_code=404)
         _keys(x,{"client","release","environment","config_identity","database","http_port","longpolling_port"},op)
-        return InstanceIdentity(_text(x["client"],"client",op),_text(x["release"],"release",op),_text(x["environment"],"environment",op),_text(x["config_identity"],"config_identity",op,True),_text(x["database"],"database",op,True),_int(x["http_port"],"http_port",op),_int(x["longpolling_port"],"longpolling_port",op))
+        instance = InstanceIdentity(_text(x["client"],"client",op),_text(x["release"],"release",op),_text(x["environment"],"environment",op),_text(x["config_identity"],"config_identity",op,True),_text(x["database"],"database",op,True),_int(x["http_port"],"http_port",op),_int(x["longpolling_port"],"longpolling_port",op))
+        if instance.client != client: raise AdapterError("STALE_INSTANCE_IDENTITY", "The selected instance identity is stale.", status_code=404)
+        return instance
     def get_status(self, client: str):
         op="runtime.status"; p=self._request(op,client=client); _keys(p,{"status"},op); x=p["status"]
         if not isinstance(x,Mapping): raise AdapterError("STATUS_PROBE_FAILED","Runtime status is unavailable.")
@@ -138,7 +145,9 @@ class OdooTuiAdapter:
             raise _malformed(op, "unknown control state is invalid")
         return RuntimeControl(mode, eligible, reason)
     def list_modules(self, client: str):
-        op="modules.list"; p=self._request(op,client=client); _keys(p,{"client","modules"},op); _text(p["client"],"client",op); result=[]
+        op="modules.list"; p=self._request(op,client=client); _keys(p,{"client","modules"},op); response_client = _text(p["client"],"client",op)
+        if response_client != client: raise _malformed(op, "field 'client' does not match the request")
+        result=[]; seen=set()
         modules = p["modules"]
         if not isinstance(modules, list): raise _malformed(op, "field 'modules' is invalid")
         for x in modules:
@@ -146,12 +155,21 @@ class OdooTuiAdapter:
             _keys(x,{"name","version","installed","installable","update_available","dependencies"},op)
             deps=x["dependencies"]
             if not isinstance(deps,list) or any(not isinstance(d,str) or not d for d in deps): raise _malformed(op)
-            result.append(ModuleRecord(_text(x["name"],"name",op),_text(x["version"],"version",op,True),_bool(x["installed"],"installed",op),_bool(x["installable"],"installable",op,True),_bool(x["update_available"],"update_available",op),tuple(sorted(deps))))
+            name = _text(x["name"], "name", op)
+            if name in seen: raise _malformed(op, "contains duplicate module names")
+            seen.add(name)
+            result.append(ModuleRecord(name,_text(x["version"],"version",op,True),_bool(x["installed"],"installed",op),_bool(x["installable"],"installable",op,True),_bool(x["update_available"],"update_available",op),tuple(sorted(deps))))
         return tuple(sorted(result,key=lambda x:x.name))
     def list_databases(self, client: str):
-        op="databases.list"; p=self._request(op,client=client); _keys(p,{"client","databases"},op); _text(p["client"],"client",op); result=[]
+        op="databases.list"; p=self._request(op,client=client); _keys(p,{"client","databases"},op); response_client = _text(p["client"],"client",op)
+        if response_client != client: raise _malformed(op, "field 'client' does not match the request")
+        result=[]; seen=set()
         if not isinstance(p["databases"],list): raise _malformed(op)
         for x in p["databases"]:
             if not isinstance(x,Mapping): raise _malformed(op)
-            _keys(x,{"name","exists"},op); result.append(DatabaseRecord(_text(x["name"],"name",op),_bool(x["exists"],"exists",op)))
+            _keys(x,{"name","exists"},op)
+            name = _text(x["name"], "name", op)
+            if name in seen: raise _malformed(op, "contains duplicate database names")
+            seen.add(name)
+            result.append(DatabaseRecord(name,_bool(x["exists"],"exists",op)))
         return tuple(sorted(result,key=lambda x:x.name))

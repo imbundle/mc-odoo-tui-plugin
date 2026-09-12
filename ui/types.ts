@@ -20,6 +20,8 @@ export interface OdooIdentity {
   longpolling_port: number | null;
 }
 
+export type SafeOdooIdentity = Omit<OdooIdentity, 'config_identity'>;
+
 export interface OdooStatus {
   state: RuntimeState;
   pid: number | null;
@@ -48,6 +50,36 @@ export interface OdooDatabase {
   exists: boolean;
 }
 
+export interface OdooSnapshotError {
+  code: string;
+}
+
+export interface OdooSnapshotClient extends OdooClient {
+  registry_identity: string;
+}
+
+export interface OdooSelectedSnapshot {
+  registry_identity: string;
+  identity: SafeOdooIdentity | null;
+  status: OdooStatus | null;
+  control: OdooControl | null;
+  modules: OdooModule[] | null;
+  databases: OdooDatabase[] | null;
+}
+
+export interface OdooSnapshotEnvelope {
+  protocol_version: 1;
+  process_instance_id: string;
+  registry_epoch: number;
+  registry_identity: string;
+  releases: { version: string }[];
+  releases_error: OdooSnapshotError | null;
+  clients?: OdooSnapshotClient[];
+  client?: string;
+  snapshot?: OdooSelectedSnapshot;
+  errors: Record<string, Record<string, OdooSnapshotError>>;
+}
+
 export interface OdooLogEntry {
   timestamp: string | null;
   pid: number | null;
@@ -62,6 +94,7 @@ export interface OdooLogPage {
   next_cursor: string | null;
   previous_cursor?: string | null;
   has_more: boolean;
+  cursor_reset?: boolean;
   has_previous?: boolean;
   stale?: boolean;
 }
@@ -69,7 +102,7 @@ export interface OdooLogPage {
 export interface OdooReadModel {
   clients: OdooClient[];
   releases?: { version: string }[];
-  identity?: OdooIdentity;
+  identity?: SafeOdooIdentity;
   status?: OdooStatus;
   control?: OdooControl;
   modules?: OdooModule[];
@@ -77,7 +110,14 @@ export interface OdooReadModel {
   logs?: OdooLogPage;
 }
 
+export interface OdooMutationPrecondition {
+  registry_identity: string;
+  process_instance_id: string;
+  registry_epoch: number;
+}
+
 export interface OdooApi {
+  getSnapshot?: (client?: string, signal?: AbortSignal) => Promise<OdooSnapshotEnvelope>;
   listClients(signal?: AbortSignal): Promise<{ clients: OdooClient[] }>;
   listReleases(signal?: AbortSignal): Promise<{ releases: { version: string }[] }>;
   getIdentity(client: string, signal?: AbortSignal): Promise<{ instance: OdooIdentity }>;
@@ -86,9 +126,9 @@ export interface OdooApi {
   getModules(client: string, signal?: AbortSignal): Promise<{ client: string; modules: OdooModule[] }>;
   getDatabases(client: string, signal?: AbortSignal): Promise<{ client: string; databases: OdooDatabase[] }>;
   getLogs(client: string, options?: { cursor?: string | null; direction?: 'older' | 'newer'; limit?: number; signal?: AbortSignal }): Promise<OdooLogPage>;
-  start(client: string, confirmation: string, mode?: StartMode): Promise<unknown>;
-  stop(client: string, confirmation: string): Promise<unknown>;
-  restart(client: string, confirmation: string, selector?: { modules: string[] } | { update_all: true }, mode?: StartMode): Promise<unknown>;
+  start(client: string, confirmation: string, mode?: StartMode, signal?: AbortSignal, precondition?: OdooMutationPrecondition): Promise<unknown>;
+  stop(client: string, confirmation: string, signal?: AbortSignal, precondition?: OdooMutationPrecondition): Promise<unknown>;
+  restart(client: string, confirmation: string, selector?: { modules: string[] } | { update_all: true }, mode?: StartMode, signal?: AbortSignal, precondition?: OdooMutationPrecondition): Promise<unknown>;
 }
 
 export interface OdooWorkspaceData extends OdooReadModel {

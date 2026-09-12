@@ -14,6 +14,15 @@ ROOT = Path(__file__).parents[1]
 AUTH = {"authenticated": True, "authorized": True}
 
 
+def current_precondition():
+    snapshot = handlers.snapshot_collection()
+    return {
+        "registry_identity": snapshot["clients"][0]["registry_identity"],
+        "process_instance_id": handlers._SNAPSHOT_PROCESS_INSTANCE_ID,
+        "registry_epoch": snapshot["registry_epoch"],
+    }
+
+
 class ReadTransport:
     def request(self, operation, **params):
         files = {
@@ -48,6 +57,7 @@ def test_manifest_exposes_exact_read_and_mutation_routes():
     assert {(item["method"], item["path"]) for item in manifest["endpoints"]} == {
         ("GET", "/odoo-tui/clients"),
         ("GET", "/odoo-tui/releases"),
+        ("GET", "/odoo-tui/snapshot"),
         ("GET", "/odoo-tui/instance/identity"),
         ("GET", "/odoo-tui/instance/status"),
         ("GET", "/odoo-tui/instance/control"),
@@ -64,14 +74,40 @@ def test_lifecycle_endpoint_sends_exact_confirmation_request():
     boundary = Boundary()
     handlers.register_operation_boundary(boundary)
     try:
-        assert endpoints.startInstance({"confirmation": "START acme"}, {"client": "acme"}, AUTH) == boundary.data
+        precondition = current_precondition()
+        assert endpoints.startInstance({"confirmation": "START acme", "precondition": precondition}, {"client": "acme"}, AUTH) == boundary.data
         assert boundary.calls == [{
             "protocol_version": 1,
             "operation": "lifecycle.start",
             "client": "acme",
             "environment": "local",
             "confirmation": "START acme",
+            "precondition": precondition,
         }]
+    finally:
+        handlers.clear_operation_boundary()
+
+
+
+
+def test_lifecycle_endpoint_rejects_changed_selected_snapshot_before_dispatch():
+    boundary = Boundary()
+    handlers.register_operation_boundary(boundary)
+    try:
+        snapshot = handlers.snapshot_collection()
+        precondition = {
+            "registry_identity": snapshot["clients"][0]["registry_identity"] + "-changed",
+            "process_instance_id": handlers._SNAPSHOT_PROCESS_INSTANCE_ID,
+            "registry_epoch": snapshot["registry_epoch"],
+        }
+        with pytest.raises(PollingError) as error:
+            endpoints.startInstance(
+                {"confirmation": "START acme", "precondition": precondition},
+                {"client": "acme"},
+                AUTH,
+            )
+        assert (error.value.status_code, error.value.code) == (409, "PRECONDITION_FAILED")
+        assert boundary.calls == []
     finally:
         handlers.clear_operation_boundary()
 
@@ -80,7 +116,7 @@ def test_start_endpoint_carries_selected_start_mode():
     boundary = Boundary()
     handlers.register_operation_boundary(boundary)
     try:
-        endpoints.startInstance({"confirmation": "START acme", "mode": "database_manager"}, {"client": "acme"}, AUTH)
+        endpoints.startInstance({"confirmation": "START acme", "mode": "database_manager", "precondition": current_precondition()}, {"client": "acme"}, AUTH)
         assert boundary.calls[0]["mode"] == "database_manager"
     finally:
         handlers.clear_operation_boundary()
@@ -91,7 +127,7 @@ def test_restart_endpoint_carries_selected_modules_without_confirmation_ui():
     handlers.register_operation_boundary(boundary)
     try:
         endpoints.restartInstance(
-            {"modules": ["parkair_account"], "confirmation": "RESTART acme"},
+            {"modules": ["parkair_account"], "confirmation": "RESTART acme", "precondition": current_precondition()},
             {"client": "acme"},
             AUTH,
         )
@@ -101,6 +137,7 @@ def test_restart_endpoint_carries_selected_modules_without_confirmation_ui():
             "client": "acme",
             "environment": "local",
             "confirmation": "RESTART acme",
+            "precondition": boundary.calls[0]["precondition"],
             "modules": ["parkair_account"],
         }
     finally:
@@ -119,7 +156,7 @@ def test_restart_update_opens_log_window_only_while_worker_runs():
     handlers.register_operation_boundary(boundary)
     try:
         endpoints.restartInstance(
-            {"modules": ["base"], "confirmation": "RESTART acme"},
+            {"modules": ["base"], "confirmation": "RESTART acme", "precondition": current_precondition()},
             {"client": "acme"},
             AUTH,
         )
@@ -134,7 +171,7 @@ def test_failed_restart_update_retains_log_window_for_diagnosis():
     try:
         with pytest.raises(PollingError):
             endpoints.restartInstance(
-                {"modules": ["base"], "confirmation": "RESTART acme"},
+                {"modules": ["base"], "confirmation": "RESTART acme", "precondition": current_precondition()},
                 {"client": "acme"},
                 AUTH,
             )
@@ -176,7 +213,7 @@ def test_operation_in_progress_maps_to_http_409():
     handlers.register_operation_boundary(Boundary(error=BridgeError("OPERATION_IN_PROGRESS", "secret details")))
     try:
         with pytest.raises(PollingError) as error:
-            endpoints.stopInstance({"confirmation": "STOP acme"}, {"client": "acme"}, AUTH)
+            endpoints.stopInstance({"confirmation": "STOP acme", "precondition": current_precondition()}, {"client": "acme"}, AUTH)
         assert (error.value.status_code, error.value.code) == (409, "OPERATION_IN_PROGRESS")
         assert "secret" not in str(error.value)
     finally:

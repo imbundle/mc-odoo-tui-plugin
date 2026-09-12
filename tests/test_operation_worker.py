@@ -11,6 +11,7 @@ def request(operation, **extra):
         "operation": operation,
         "client": "acme",
         "environment": "local",
+        **({"precondition": {"registry_identity": "registry", "process_instance_id": "0123456789abcdef0123456789abcdef", "registry_epoch": 0}} if operation.startswith("lifecycle.") or operation == "updates.apply" else {}),
         **extra,
     }
 
@@ -199,6 +200,14 @@ def test_reconcile_reads_pm2_and_database_only():
         "data": {"state": "online", "control_mode": "unknown", "database_exists": True},
     }
     assert calls == [("status", "odoo-19-acme-local"), ("database_exists", "19_acme")]
+
+
+@pytest.mark.parametrize("operation", ["lifecycle.start", "lifecycle.stop", "lifecycle.restart"])
+def test_lifecycle_precondition_is_required_at_worker_boundary(operation):
+    value = request(operation, precondition=None, confirmation=f"{operation.rsplit('.', 1)[1].upper()} acme")
+    value.pop("precondition")
+    with pytest.raises(ProtocolError, match="precondition"):
+        validate_request(value)
 
 
 @pytest.mark.parametrize("operation", ["lifecycle.start", "lifecycle.stop", "lifecycle.restart"])

@@ -1,42 +1,81 @@
-import type { OdooApi, OdooClient, OdooControl, OdooDatabase, OdooIdentity, OdooLogPage, OdooModule, OdooStatus } from './types';
+import type { OdooApi, OdooClient, OdooControl, OdooDatabase, OdooIdentity, OdooLogPage, OdooModule, OdooMutationPrecondition, OdooSnapshotEnvelope, OdooStatus } from './types';
 
 type Json = Record<string, unknown>;
 type FetchLike = typeof fetch;
+const REQUEST_TIMEOUT_MS = 6000;
 
 function token(): string {
   try {
-    return window.localStorage.getItem('mission-control-token')?.trim() || '';
+    const stored = window.localStorage.getItem('mission-control-token')?.trim() || '';
+    if (stored) return stored;
   } catch {
-    return '';
+    // No persistent token is available; let the host return 401.
   }
+  return '';
 }
 
-function errorMessage(payload: unknown): string {
-  if (payload && typeof payload === 'object' && typeof (payload as Json).detail === 'string') return String((payload as Json).detail);
+function errorCode(payload: unknown): string | undefined {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return undefined;
+  const value = payload as Record<string, unknown>;
+  return typeof value.error === 'string' ? value.error : typeof value.code === 'string' ? value.code : undefined;
+}
+
+function errorMessage(_payload: unknown): string {
   return 'Odoo backend request failed.';
 }
 
 export function createOdooApi(fetcher: FetchLike = fetch): OdooApi {
-  async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  async function request<T>(path: string, init?: RequestInit, timeoutMs = REQUEST_TIMEOUT_MS): Promise<T> {
     const bearer = token();
-    const response = await fetcher(`/api/local/odoo-tui/${path}`, {
-      ...init,
-      headers: {
-        Accept: 'application/json',
-        ...(bearer ? { Authorization: `Bearer ${bearer}` } : {}),
-        ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
-        ...init?.headers,
-      },
-    });
-    const payload = await response.json().catch(() => null);
-    if (!response.ok) throw new Error(errorMessage(payload));
-    if (!payload || typeof payload !== 'object') throw new Error('Odoo backend returned an invalid response.');
-    return payload as T;
+    const deadline = new AbortController();
+    let rejectDeadline!: (error: Error) => void;
+    const deadlinePromise = new Promise<never>((_, reject) => { rejectDeadline = reject; });
+    const timeout = globalThis.setTimeout(() => {
+      deadline.abort();
+      rejectDeadline(new Error('Odoo backend request timed out.'));
+    }, timeoutMs);
+    const abortCaller = () => {
+      deadline.abort();
+      rejectDeadline(new Error('Odoo backend request was aborted.'));
+    };
+    if (init?.signal?.aborted) abortCaller();
+    else init?.signal?.addEventListener('abort', abortCaller, { once: true });
+    try {
+      const response = await Promise.race([
+        fetcher(`/api/local/odoo-tui/${path}`, {
+          ...init,
+          signal: deadline.signal,
+          headers: {
+            Accept: 'application/json',
+            ...(bearer ? { Authorization: `Bearer ${bearer}` } : {}),
+            ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
+            ...init?.headers,
+          },
+        }),
+        deadlinePromise,
+      ]);
+      const payload = await Promise.race([
+        response.json().catch(() => null),
+        deadlinePromise,
+      ]);
+      if (!response.ok) {
+        const error = new Error(errorMessage(payload)) as Error & { code?: string; status?: number };
+        error.code = errorCode(payload);
+        error.status = response.status;
+        throw error;
+      }
+      if (!payload || typeof payload !== 'object') throw new Error('Odoo backend returned an invalid response.');
+      return payload as T;
+    } finally {
+      globalThis.clearTimeout(timeout);
+      init?.signal?.removeEventListener('abort', abortCaller);
+    }
   }
-  const get = <T>(path: string, signal?: AbortSignal) => request<T>(path, signal ? { signal } : undefined);
-  const post = <T>(path: string, body: unknown) => request<T>(path, { method: 'POST', body: JSON.stringify(body) });
+  const get = <T>(path: string, signal?: AbortSignal, timeoutMs = REQUEST_TIMEOUT_MS) => request<T>(path, signal ? { signal } : undefined, timeoutMs);
+  const post = <T>(path: string, body: unknown, signal?: AbortSignal) => request<T>(path, { method: 'POST', body: JSON.stringify(body), ...(signal ? { signal } : {}) });
   const query = (client: string) => `?client=${encodeURIComponent(client)}`;
   return {
+    getSnapshot: (client, signal) => get<OdooSnapshotEnvelope>(`snapshot${client ? query(client) : ''}`, signal, 13000),
     listClients: (signal) => get<{ clients: OdooClient[] }>('clients', signal),
     listReleases: (signal) => get<{ releases: { version: string }[] }>('releases', signal),
     getIdentity: (client, signal) => get<{ instance: OdooIdentity }>(`instance/identity${query(client)}`, signal),
@@ -50,8 +89,8 @@ export function createOdooApi(fetcher: FetchLike = fetch): OdooApi {
       if (options.direction) params.set('direction', options.direction);
       return get<OdooLogPage>(`instance/logs?${params.toString()}`, options.signal);
     },
-    start: (client, confirmation, mode = 'client') => post(`instance/start${query(client)}`, { confirmation, mode }),
-    stop: (client, confirmation) => post(`instance/stop${query(client)}`, { confirmation }),
-    restart: (client, confirmation, selector, mode = 'client') => post(`instance/restart${query(client)}`, { ...(selector ?? {}), confirmation, mode }),
+    start: (client, confirmation, mode = 'client', signal, precondition?: OdooMutationPrecondition) => post(`instance/start${query(client)}`, { confirmation, mode, ...(precondition ? { precondition } : {}) }, signal),
+    stop: (client, confirmation, signal, precondition?: OdooMutationPrecondition) => post(`instance/stop${query(client)}`, { confirmation, ...(precondition ? { precondition } : {}) }, signal),
+    restart: (client, confirmation, selector, mode = 'client', signal, precondition?: OdooMutationPrecondition) => post(`instance/restart${query(client)}`, { ...(selector ?? {}), confirmation, mode, ...(precondition ? { precondition } : {}) }, signal),
   };
 }

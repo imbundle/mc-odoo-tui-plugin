@@ -11,6 +11,7 @@ const manifest: PluginManifest = {
   endpoints: [
     { method: 'GET', path: '/odoo-tui/clients', handler: 'listClients', authRequired: true },
     { method: 'GET', path: '/odoo-tui/releases', handler: 'listReleases', authRequired: true },
+    { method: 'GET', path: '/odoo-tui/snapshot', handler: 'getSnapshot', authRequired: true },
     { method: 'GET', path: '/odoo-tui/instance/identity', handler: 'getInstanceIdentity', authRequired: true },
     { method: 'GET', path: '/odoo-tui/instance/status', handler: 'getInstanceStatus', authRequired: true },
     { method: 'GET', path: '/odoo-tui/instance/control', handler: 'getInstanceControl', authRequired: true },

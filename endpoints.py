@@ -114,6 +114,45 @@ def listReleases(body: RequestBody, params: QueryParams, auth: object = _DIRECT_
     return _public(handlers.list_releases())
 
 
+def getSnapshot(body: RequestBody, params: QueryParams, auth: object = _DIRECT_AUTH_MISSING) -> dict:
+    """Return one coherent registry or selected-client read snapshot."""
+    if auth is _DIRECT_AUTH_MISSING:
+        raise PollingError(401, "UNAUTHENTICATED", "Authentication is required.")
+    _require_authenticated(auth)
+    if not isinstance(body, dict) or body or not isinstance(params, Mapping):
+        raise PollingError(400, "INVALID_REQUEST", "snapshot accepts only an empty GET body.")
+    if any(name != "client" for name in params):
+        raise PollingError(400, "INVALID_REQUEST", "snapshot accepts only the client selector.")
+    value = params.get("client")
+    if isinstance(value, (list, tuple)):
+        if len(value) != 1 or not isinstance(value[0], str) or not value[0]:
+            raise PollingError(400, "INVALID_REQUEST", "client must be specified exactly once.")
+        value = value[0]
+    if value is not None and not isinstance(value, str):
+        raise PollingError(400, "INVALID_REQUEST", "client must be a valid selector.")
+    if "client" in params and value == "":
+        raise PollingError(400, "INVALID_REQUEST", "client must be a valid selector.")
+    if value:
+        try:
+            client_size = len(value.encode("utf-8"))
+        except UnicodeEncodeError as error:
+            raise PollingError(400, "INVALID_REQUEST", "client must be a valid selector.") from error
+        if (
+            client_size > 128
+            or handlers._CLIENT_SELECTOR_RE.fullmatch(value) is None
+            or value in {"constructor", "prototype", "__proto__"}
+        ):
+            raise PollingError(400, "INVALID_REQUEST", "client must be a valid selector.")
+    try:
+        if value:
+            return handlers.snapshot_selected(value)
+        return handlers.snapshot_collection()
+    except PollingError:
+        raise
+    except Exception as error:
+        raise PollingError(503, "SNAPSHOT_UNAVAILABLE", "The snapshot is unavailable.") from error
+
+
 def getInstanceIdentity(body: RequestBody, params: QueryParams, auth: object = _DIRECT_AUTH_MISSING) -> dict:
     """Return the selected instance identity without exposing transport details."""
     _require_authenticated(auth)
@@ -191,14 +230,16 @@ def _operation_error(error: Any) -> None:
     raise PollingError(statuses.get(code, 503), code, details.get(code, "operation bridge is unavailable")) from None
 
 
-def _invoke_operation(request: dict[str, Any]) -> dict[str, Any]:
+def _invoke_operation(request: dict[str, Any], precondition: Mapping[str, Any] | None = None) -> dict[str, Any]:
     log_window = request["operation"] == "lifecycle.restart" and ("modules" in request or request.get("update_all") is True)
     if log_window:
         handlers.begin_update_log_window(request["client"])
     succeeded = False
     try:
         try:
-            response = handlers._operation_model_boundary().invoke(request)
+            response = (handlers.invoke_operation(request, precondition)
+                        if precondition is not None
+                        else handlers._operation_model_boundary().invoke(request))
         except Exception as error:
             if isinstance(getattr(error, "code", None), str) and isinstance(getattr(error, "message", None), str):
                 _operation_error(error)
@@ -237,6 +278,9 @@ def _lifecycle_endpoint(operation: str, body: RequestBody, params: QueryParams, 
     if not isinstance(body, dict) or "confirmation" not in body:
         raise PollingError(400, "INVALID_REQUEST", "invalid operation request")
     confirmation = body["confirmation"]
+    precondition = body.get("precondition")
+    if not isinstance(precondition, Mapping):
+        raise PollingError(409, "PRECONDITION_FAILED", "The selected Odoo instance changed.")
     expected = f"{operation.upper()} {client}"
     if confirmation != expected:
         raise PollingError(400, "CONFIRMATION_REQUIRED", "invalid operation request")
@@ -244,7 +288,7 @@ def _lifecycle_endpoint(operation: str, body: RequestBody, params: QueryParams, 
     if mode is not None and operation == "stop":
         raise PollingError(400, "INVALID_REQUEST", "invalid operation request")
     selector: dict[str, Any] = {}
-    extra = set(body) - {"confirmation", "mode"}
+    extra = set(body) - {"confirmation", "mode", "precondition"}
     if operation == "restart":
         if extra == set():
             pass
@@ -263,8 +307,9 @@ def _lifecycle_endpoint(operation: str, body: RequestBody, params: QueryParams, 
         "environment": "local",
         "confirmation": confirmation,
         **({"mode": mode} if mode is not None else {}),
+        "precondition": dict(precondition),
         **selector,
-    })
+    }, precondition)
 
 
 def startInstance(body: RequestBody, params: QueryParams, auth: object = None) -> dict:
@@ -286,10 +331,20 @@ def _update_selector(body: RequestBody, *, apply: bool) -> dict[str, Any]:
         return {"update_all": True}
     if set(body) == {"modules"} and not apply:
         return {"modules": _module_selector(body["modules"])}
-    if apply and set(body) == {"update_all", "confirmation"} and body["update_all"] is True and isinstance(body["confirmation"], str) and body["confirmation"]:
-        return {"update_all": True, "confirmation": body["confirmation"]}
-    if apply and set(body) == {"modules", "confirmation"} and isinstance(body["confirmation"], str) and body["confirmation"]:
-        return {"modules": _module_selector(body["modules"]), "confirmation": body["confirmation"]}
+    if apply and set(body) in ({"update_all", "confirmation", "precondition"}, {"modules", "confirmation", "precondition"}):
+        precondition = body.get("precondition")
+        if not isinstance(precondition, Mapping):
+            raise PollingError(409, "PRECONDITION_FAILED", "The selected Odoo instance changed.")
+        selector = {"precondition": dict(precondition), "confirmation": body["confirmation"]}
+        if body.get("update_all") is True:
+            selector["update_all"] = True
+        elif "modules" in body:
+            selector["modules"] = _module_selector(body["modules"])
+        else:
+            raise PollingError(400, "INVALID_REQUEST", "invalid operation request")
+        if not isinstance(selector["confirmation"], str) or not selector["confirmation"]:
+            raise PollingError(400, "INVALID_REQUEST", "invalid operation request")
+        return selector
     raise PollingError(400, "INVALID_REQUEST", "invalid operation request")
 
 
@@ -306,7 +361,8 @@ def applyModuleUpdates(body: RequestBody, params: QueryParams, auth: object = No
     client = _operation_client(params)
     handlers._require_registered_client(client)
     selector = _update_selector(body, apply=True)
-    return _invoke_operation({"protocol_version": 1, "operation": "updates.apply", "client": client, "environment": "local", **selector})
+    precondition = selector.pop("precondition")
+    return _invoke_operation({"protocol_version": 1, "operation": "updates.apply", "client": client, "environment": "local", **selector, "precondition": precondition}, precondition)
 
 
 # Importing the production endpoints is the telemetry plugin initialization

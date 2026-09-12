@@ -24,6 +24,7 @@ def request(operation="lifecycle.start", **extra):
         "operation": operation,
         "client": "acme",
         "environment": "local",
+        **({"precondition": {"registry_identity": "registry", "process_instance_id": "0123456789abcdef0123456789abcdef", "registry_epoch": 0}} if operation.startswith("lifecycle.") else {}),
         **extra,
     }
 
@@ -62,6 +63,34 @@ def test_worker_success_round_trips_strict_envelope(tmp_path):
         "control_mode": "client",
         "session": True,
     }
+
+
+def test_worker_pipe_failure_is_sanitized(tmp_path):
+    worker = tmp_path / "worker.py"
+    worker.write_text("import os\nos._exit(0)\n", encoding="utf-8")
+    bridge = OperationBridge(config(worker, lifecycle_timeout_seconds=1))
+    with pytest.raises(BridgeError) as error:
+        bridge.invoke(request("lifecycle.start", confirmation="START acme"))
+    assert error.value.code == "WORKER_PROTOCOL_ERROR"
+
+
+def test_selector_setup_failure_terminates_worker(tmp_path, monkeypatch):
+    worker = tmp_path / "worker.py"
+    worker.write_text("import time\ntime.sleep(10)\n", encoding="utf-8")
+
+    class BrokenSelector:
+        def register(self, *args):
+            raise OSError("selector setup failed")
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr("operation_bridge.selectors.DefaultSelector", lambda: BrokenSelector())
+    bridge = OperationBridge(config(worker, lifecycle_timeout_seconds=1, term_grace_seconds=0.05, reap_timeout_seconds=0.05))
+    with pytest.raises(BridgeError) as error:
+        bridge.invoke(request("lifecycle.start", confirmation="START acme"))
+    assert error.value.code == "WORKER_PROTOCOL_ERROR"
+
 
 
 def test_worker_error_is_typed_and_redacted(tmp_path):

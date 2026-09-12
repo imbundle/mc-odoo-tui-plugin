@@ -1,7 +1,7 @@
 import React from 'react';
 import { Activity, AlertTriangle, Check, ChevronDown, Database as DatabaseIcon, GitBranch, Info, ListTree, Minus, Package, Play, RefreshCw, RotateCcw, ScrollText, Server, Settings2, Square } from 'lucide-react';
 import { Button } from './Button';
-import type { OdooClient, OdooControl, OdooDatabase, OdooIdentity, OdooModule, OdooStatus, OdooWorkspaceData, RuntimeState, StartMode } from './types';
+import type { OdooClient, OdooControl, OdooDatabase, SafeOdooIdentity, OdooModule, OdooStatus, OdooWorkspaceData, RuntimeState, StartMode } from './types';
 
 export type WorkspaceState = 'loading' | 'ready' | 'error' | 'unavailable';
 export type LifecycleOperation = 'start' | 'stop' | 'restart';
@@ -12,6 +12,8 @@ export interface OdooWorkspaceProps {
   error?: string;
   operationPhase?: 'idle' | 'planning' | 'applying' | 'pending';
   operationMessage?: string;
+  readModelConfirmed?: boolean;
+  moduleReadConfirmed?: boolean;
   startMode: StartMode;
   clientStatuses: Record<string, RuntimeState | undefined>;
   allModulesSelected: boolean;
@@ -63,6 +65,8 @@ export function OdooWorkspace({
   error,
   operationPhase = 'idle',
   operationMessage,
+  readModelConfirmed = true,
+  moduleReadConfirmed = true,
   startMode,
   clientStatuses,
   allModulesSelected,
@@ -105,7 +109,7 @@ export function OdooWorkspace({
   };
 
   const selectedClient: OdooClient | undefined = data.clients.find((client) => client.name === data.selectedClient);
-  const identity: OdooIdentity | undefined = data.identity;
+  const identity: SafeOdooIdentity | undefined = data.identity;
   const status: OdooStatus | undefined = data.status;
   const control: OdooControl | undefined = data.control;
   const modules: OdooModule[] = data.modules ?? [];
@@ -116,13 +120,14 @@ export function OdooWorkspace({
   const confirmedDatabase = databases.filter((database) => database.exists);
   const releaseMismatch = Boolean(selectedClient && identity && selectedClient.release && identity.release !== selectedClient.release);
   const busy = operationPhase !== 'idle';
-  const eligible = state === 'ready' && !busy && !releaseMismatch && control?.control_mode === 'client' && control.lifecycle_eligible === true;
+  const eligible = readModelConfirmed && state === 'ready' && !busy && !releaseMismatch && control?.control_mode === 'client' && control.lifecycle_eligible === true;
   const online = status?.state === 'online';
   const stopped = status?.state === 'stopped';
 
   return (
     <main data-testid="odoo-tui-route" className="box-border flex h-full min-h-0 min-w-0 w-full max-w-full flex-1 flex-col gap-4 overflow-x-hidden overflow-y-auto overscroll-contain p-0 text-text sm:gap-5 xl:overflow-y-hidden">
       {state !== 'ready' ? <StateNotice state={state} error={error} onRefresh={onRefresh} /> : null}
+      {state === 'ready' && (!readModelConfirmed || !moduleReadConfirmed) ? <p data-testid="odoo-tui-stale-indicator" role="status" aria-live="polite" className="text-xs text-text-muted">Some Odoo data is being refreshed; affected actions remain disabled until confirmed.</p> : null}
 
       <Panel testId="client-selection" title="Instance" icon={<Server aria-hidden="true" size={15} className="text-text-muted" />}>
         {data.clients.length === 0 ? <p className="mt-2 text-sm text-text-muted">No registered Odoo clients are available.</p> : (
@@ -162,7 +167,7 @@ export function OdooWorkspace({
                 <div className="mt-2 flex flex-wrap gap-2">
                   <Button icon={<Play size={15} />} variant="positive" disabled={!eligible || !stopped} onClick={(event) => onLifecycle('start', event.currentTarget)}>Start</Button>
                   <Button icon={<Square size={15} />} variant="danger" disabled={!eligible || !online} onClick={(event) => onLifecycle('stop', event.currentTarget)}>Stop</Button>
-                  <Button icon={<RotateCcw size={15} />} variant="primary" disabled={!eligible || !online} onClick={(event) => onLifecycle('restart', event.currentTarget)}>Restart</Button>
+                  <Button icon={<RotateCcw size={15} />} variant="primary" disabled={!eligible || !online || (!moduleReadConfirmed && (allModulesSelected || selectedModules.size > 0))} onClick={(event) => onLifecycle('restart', event.currentTarget)}>Restart</Button>
                 </div>
                 {!eligible ? <p className="mt-2 text-xs text-text-muted">Actions require a confirmed runtime and database.</p> : null}
               </div>
@@ -176,10 +181,10 @@ export function OdooWorkspace({
           <Panel testId="module-updates" title="Modules" icon={<Package aria-hidden="true" size={15} className="text-text-muted" />} className="xl:flex xl:min-h-0 xl:flex-1 xl:flex-col">
             {startMode !== 'client' ? <div data-testid="module-mode-notice" role="status" aria-live="polite" className="mt-2 inline-flex max-w-full items-start gap-1.5 rounded-full border px-2.5 py-1 text-xs" style={{ color: 'var(--color-warning)', borderColor: 'var(--color-warning)', backgroundColor: 'color-mix(in srgb, var(--color-warning) 10%, transparent)' }}><AlertTriangle aria-hidden="true" size={14} className="mt-0.5 shrink-0" /><span>Module updates are available only in Client mode.</span></div> : null}
             <div data-testid="module-list" className="mt-2 flex min-h-0 flex-col gap-1 xl:flex-1 xl:overflow-y-auto xl:pr-1">
-              <label title="Update all installed modules" className={`box-border flex h-[44px] min-h-[44px] w-full min-w-0 max-w-full shrink-0 items-center gap-2 rounded-md border px-2.5 py-1 text-sm ${allModulesSelected || allModulesPartiallySelected ? 'border-accent/50 bg-accent-subtle' : 'border-border-subtle bg-surface'}`}><span className="flex min-w-0 items-center gap-2 font-semibold text-accent"><input type="checkbox" aria-label="Select all installed modules" aria-checked={allModulesPartiallySelected ? 'mixed' : allModulesSelected} checked={allModulesSelected} disabled={!eligible || busy || startMode !== 'client'} onChange={(event) => onAllToggle(event.target.checked)} ref={(element) => { if (element) element.indeterminate = allModulesPartiallySelected; }} className="peer sr-only" /><span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-[5px] border transition-colors peer-checked:border-accent peer-checked:bg-accent peer-focus-visible:ring-2 peer-focus-visible:ring-accent/60 peer-disabled:opacity-50 ${allModulesPartiallySelected ? 'border-accent bg-accent-subtle text-accent' : 'border-border-subtle bg-surface text-surface'}`}>{allModulesPartiallySelected ? <Minus aria-hidden="true" size={14} strokeWidth={3} /> : <Check aria-hidden="true" size={14} strokeWidth={3} className={allModulesSelected ? 'opacity-100' : 'opacity-0'} />}</span><span>ALL</span></span></label>
-              {modules.length === 0 ? <p className="py-1 text-sm text-text-muted">No client module catalogue is available.</p> : modules.map((module) => <label key={module.name} className={`box-border flex h-[44px] min-h-[44px] w-full min-w-0 max-w-full shrink-0 items-center justify-between gap-2 overflow-hidden rounded-md border px-2.5 py-1 text-sm transition-colors ${!module.installed || module.installable === false ? 'border-border-subtle bg-surface opacity-60 cursor-not-allowed' : selectedSelectableModules.has(module.name) ? 'border-accent/50 bg-accent-subtle' : 'border-transparent bg-surface'}`}><span className={`flex min-w-0 flex-1 items-center gap-2 overflow-hidden ${module.installed && module.installable !== false ? 'text-positive' : 'text-text-muted'}`}><input type="checkbox" aria-label={`Select module ${module.name}`} checked={selectedSelectableModules.has(module.name)} disabled={startMode !== 'client' || allModulesSelected || !module.installed || module.installable === false || busy} onChange={(event) => onModuleToggle(module.name, event.target.checked)} className="peer sr-only" /><span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-[5px] border border-border-subtle bg-surface text-surface transition-colors peer-checked:border-accent peer-checked:bg-accent peer-focus-visible:ring-2 peer-focus-visible:ring-accent/60 peer-disabled:opacity-50"><Check aria-hidden="true" size={14} strokeWidth={3} className={selectedSelectableModules.has(module.name) ? 'opacity-100' : 'opacity-0'} /></span><span className={`min-w-0 flex-1 truncate ${module.installed && module.installable !== false ? 'font-semibold' : 'font-medium'}`}>{module.name}</span></span><span className={`max-w-[40%] shrink text-right text-xs [overflow-wrap:anywhere] ${module.installed && module.installable !== false ? 'text-positive/80' : 'text-text-muted'}`}>{module.version || 'Version unknown'}</span></label>)}
+              <label title="Update all installed modules" className={`box-border flex h-[44px] min-h-[44px] w-full min-w-0 max-w-full shrink-0 items-center gap-2 rounded-md border px-2.5 py-1 text-sm ${allModulesSelected || allModulesPartiallySelected ? 'border-accent/50 bg-accent-subtle' : 'border-border-subtle bg-surface'}`}><span className="flex min-w-0 items-center gap-2 font-semibold text-accent"><input type="checkbox" aria-label="Select all installed modules" aria-checked={allModulesPartiallySelected ? 'mixed' : allModulesSelected} checked={allModulesSelected} disabled={!eligible || !moduleReadConfirmed || busy || startMode !== 'client'} onChange={(event) => onAllToggle(event.target.checked)} ref={(element) => { if (element) element.indeterminate = allModulesPartiallySelected; }} className="peer sr-only" /><span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-[5px] border transition-colors peer-checked:border-accent peer-checked:bg-accent peer-focus-visible:ring-2 peer-focus-visible:ring-accent/60 peer-disabled:opacity-50 ${allModulesPartiallySelected ? 'border-accent bg-accent-subtle text-accent' : 'border-border-subtle bg-surface text-surface'}`}>{allModulesPartiallySelected ? <Minus aria-hidden="true" size={14} strokeWidth={3} /> : <Check aria-hidden="true" size={14} strokeWidth={3} className={allModulesSelected ? 'opacity-100' : 'opacity-0'} />}</span><span>ALL</span></span></label>
+              {modules.length === 0 ? <p className="py-1 text-sm text-text-muted">No client module catalogue is available.</p> : modules.map((module) => <label key={module.name} className={`box-border flex h-[44px] min-h-[44px] w-full min-w-0 max-w-full shrink-0 items-center justify-between gap-2 overflow-hidden rounded-md border px-2.5 py-1 text-sm transition-colors ${!module.installed || module.installable === false ? 'border-border-subtle bg-surface opacity-60 cursor-not-allowed' : selectedSelectableModules.has(module.name) ? 'border-accent/50 bg-accent-subtle' : 'border-transparent bg-surface'}`}><span className={`flex min-w-0 flex-1 items-center gap-2 overflow-hidden ${module.installed && module.installable !== false ? 'text-positive' : 'text-text-muted'}`}><input type="checkbox" aria-label={`Select module ${module.name}`} checked={selectedSelectableModules.has(module.name)} disabled={!moduleReadConfirmed || startMode !== 'client' || allModulesSelected || !module.installed || module.installable === false || busy} onChange={(event) => onModuleToggle(module.name, event.target.checked)} className="peer sr-only" /><span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-[5px] border border-border-subtle bg-surface text-surface transition-colors peer-checked:border-accent peer-checked:bg-accent peer-focus-visible:ring-2 peer-focus-visible:ring-accent/60 peer-disabled:opacity-50"><Check aria-hidden="true" size={14} strokeWidth={3} className={selectedSelectableModules.has(module.name) ? 'opacity-100' : 'opacity-0'} /></span><span className={`min-w-0 flex-1 truncate ${module.installed && module.installable !== false ? 'font-semibold' : 'font-medium'}`}>{module.name}</span></span><span className={`max-w-[40%] shrink text-right text-xs [overflow-wrap:anywhere] ${module.installed && module.installable !== false ? 'text-positive/80' : 'text-text-muted'}`}>{module.version || 'Version unknown'}</span></label>)}
             </div>
-            {!eligible ? <p className="mt-2 text-xs text-text-muted">Module updates require a confirmed Client runtime and database.</p> : null}
+            {!eligible || !moduleReadConfirmed ? <p className="mt-2 text-xs text-text-muted">Module updates require a confirmed Client runtime and database.</p> : null}
           </Panel>
         </div>
 

@@ -114,15 +114,16 @@ class OperationBridge:
 
     def _collect(self, process: subprocess.Popen[bytes], payload: bytes, timeout: float) -> tuple[bytes, bytes]:
         assert process.stdin is not None and process.stdout is not None and process.stderr is not None
-        process.stdin.write(payload)
-        process.stdin.close()
-        selector = selectors.DefaultSelector()
-        selector.register(process.stdout, selectors.EVENT_READ, "stdout")
-        selector.register(process.stderr, selectors.EVENT_READ, "stderr")
+        selector: selectors.BaseSelector | None = None
         stdout = bytearray()
         stderr = bytearray()
         deadline = time.monotonic() + timeout
         try:
+            selector = selectors.DefaultSelector()
+            selector.register(process.stdout, selectors.EVENT_READ, "stdout")
+            selector.register(process.stderr, selectors.EVENT_READ, "stderr")
+            process.stdin.write(payload)
+            process.stdin.close()
             while selector.get_map():
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
@@ -146,8 +147,15 @@ class OperationBridge:
                 self._terminate_group(process, self.config)
                 raise BridgeError("OPERATION_TIMED_OUT", "operation outcome is indeterminate; refresh status")
             return bytes(stdout), bytes(stderr)
+        except OSError as exc:
+            self._terminate_group(process, self.config)
+            raise BridgeError("WORKER_PROTOCOL_ERROR", "operation worker communication failed") from exc
+        except (ValueError, KeyError) as exc:
+            self._terminate_group(process, self.config)
+            raise BridgeError("WORKER_PROTOCOL_ERROR", "operation worker communication failed") from exc
         finally:
-            selector.close()
+            if selector is not None:
+                selector.close()
             self._close_streams(process)
 
     @staticmethod

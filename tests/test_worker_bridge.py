@@ -115,6 +115,12 @@ def test_fixed_local_environment_and_exact_request_keys():
     assert request == {"protocol_version": 1, "operation": "clients.list", "client": "", "environment": "local"}
 
 
+def test_invalid_utf8_is_malformed_response(worker_script):
+    worker = worker_script("import sys\nsys.stdout.buffer.write(b'\\xff')\n")
+    with pytest.raises(BridgeError) as error:
+        bridge(worker).invoke(operation="runtime.status", client="demo")
+    assert error.value.code == "MALFORMED_RESPONSE"
+
 def test_public_allowlist_has_exactly_seven_operations():
     import worker_bridge
     assert worker_bridge._ALLOWED_OPERATIONS == {"clients.list", "releases.list", "instance.identity", "runtime.status", "runtime.control", "modules.list", "databases.list"}

@@ -18,8 +18,22 @@ const userEvent = (await import('@testing-library/user-event')).default;
 const { default: OdooTuiRoute } = await import('./OdooTuiRoute');
 
 const calls: string[] = [];
+const clients = [{ name: 'acme', release: '19', environment: 'local', local_url: null }, { name: 'beta', release: '19', environment: 'local', local_url: null }];
+const snapshotClient = (client: string) => clients.find((item) => item.name === client)!;
+const snapshotIdentity = (client: string) => JSON.stringify([client, '19', 'local', null]);
+const snapshotRegistryIdentity = JSON.stringify(clients.map((client) => [client.name, snapshotIdentity(client.name)]));
+const snapshot = (client: string, state: 'online' | 'stopped' = 'online') => ({
+  registry_identity: snapshotIdentity(client),
+  identity: { client, release: '19', environment: 'local', database: `19_${client}`, http_port: client === 'beta' ? 8070 : 8069, longpolling_port: client === 'beta' ? 8073 : 8072 },
+  status: { state, pid: state === 'online' ? 123 : null, process_name: `odoo-19-${client}-local`, pm2_id: client === 'beta' ? 2 : 1, startup_mode: null },
+  control: { control_mode: 'client' as const, lifecycle_eligible: true, reason: null },
+  modules: [{ name: 'base', version: '1.0', installed: true, installable: true, update_available: false, dependencies: [] }, { name: 'demo', version: '1.0', installed: false, installable: true, update_available: false, dependencies: [] }],
+  databases: [{ name: `19_${client}`, exists: true }],
+});
+const getSnapshot = async (client?: string) => client ? { protocol_version: 1 as const, process_instance_id: '0123456789abcdef0123456789abcdef', registry_epoch: 0, registry_identity: snapshotRegistryIdentity, releases: [{ version: '19' }], releases_error: null, client, snapshot: snapshot(client), errors: {} } : { protocol_version: 1 as const, process_instance_id: '0123456789abcdef0123456789abcdef', registry_epoch: 0, registry_identity: snapshotRegistryIdentity, clients: clients.map((item) => ({ ...item, registry_identity: snapshotIdentity(item.name) })), releases: [{ version: '19' }], releases_error: null, errors: {} };
 const api = {
-  listClients: async () => ({ clients: [{ name: 'acme', release: '19', environment: 'local', local_url: null }, { name: 'beta', release: '19', environment: 'local', local_url: null }] }),
+  getSnapshot,
+  listClients: async () => ({ clients }),
   listReleases: async () => ({ releases: [{ version: '19' }] }),
   getIdentity: async () => ({ instance: { client: 'acme', release: '19', environment: 'local', config_identity: null, database: '19_acme', http_port: 8069, longpolling_port: 8072 } }),
   getStatus: async (client = 'acme') => ({ status: { state: client === 'beta' ? 'stopped' as const : 'online' as const, pid: client === 'beta' ? null : 123, process_name: `odoo-19-${client}-local`, pm2_id: client === 'beta' ? 2 : 1, startup_mode: null } }),
@@ -67,6 +81,7 @@ if (!view.container.querySelector('[aria-label="Start mode"] button')?.className
 if (!screen.getByRole('checkbox', { name: 'Select all installed modules' })) throw new Error('ALL module selector is missing');
 if (!view.container.querySelector('label[title="Update all installed modules"] > span')?.className.includes('text-accent')) throw new Error('ALL must use accent purple text');
 if (screen.queryByText('All installed')) throw new Error('ALL selector must not use an overflowing text label');
+await waitFor(() => screen.getByText('Odoo worker ready'));
 if (!screen.getByText('Odoo worker ready')) throw new Error('Odoo log entry is missing');
 const logViewport = view.container.querySelector('[data-testid="odoo-log-viewport"]');
 if (!logViewport || !logViewport.className.includes('overflow-y-auto')) throw new Error('Odoo log viewport must scroll');
@@ -137,6 +152,7 @@ view.unmount();
 const startModes: string[] = [];
 const stoppedApi = {
   ...api,
+  getSnapshot: async (client?: string) => client ? { ...(await getSnapshot(client)), snapshot: snapshot(client, 'stopped') } : getSnapshot(),
   getStatus: async () => ({ status: { state: 'stopped' as const, pid: null, process_name: 'odoo-19-acme-local', pm2_id: 1, startup_mode: null } }),
   start: async (_client: string, _confirmation: string, mode?: string) => { startModes.push(mode ?? 'missing'); return { client: 'acme', operation: 'start', state: 'online' }; },
 };
@@ -155,3 +171,136 @@ await user.click(screen.getByRole('button', { name: 'Start' }));
 await waitFor(() => { if (!startModes.includes('database_manager')) throw new Error('selected start mode was not sent'); });
 stoppedView.unmount();
 console.log('UI mounted route contract PASS');
+
+let delayBetaIdentity = false;
+const betaIdentityResolvers: Array<() => void> = [];
+const betaIdentityGate = new Promise<void>((resolve) => { betaIdentityResolvers.push(resolve); });
+const snapshotApi = {
+  listClients: async () => ({ clients: [{ name: 'acme', release: '19', environment: 'local', local_url: null }, { name: 'beta', release: '19', environment: 'local', local_url: null }] }),
+  listReleases: async () => ({ releases: [{ version: '19' }] }),
+  getIdentity: async (client = 'acme') => {
+    if (client === 'beta' && delayBetaIdentity) await betaIdentityGate;
+    return { instance: { client, release: '19', environment: 'local', config_identity: `/private/${client}.conf`, database: `19_${client}`, http_port: client === 'beta' ? 8070 : 8069, longpolling_port: client === 'beta' ? 8073 : 8072 } };
+  },
+  getStatus: async (client = 'acme') => ({ status: { state: client === 'beta' ? 'stopped' as const : 'online' as const, pid: client === 'beta' ? null : 123, process_name: `odoo-19-${client}-local`, pm2_id: client === 'beta' ? 2 : 1, startup_mode: null } }),
+  getControl: async () => ({ control: { control_mode: 'client' as const, lifecycle_eligible: true, reason: null } }),
+  getModules: async (client = 'acme') => ({ client, modules: [{ name: 'base', version: '1.0', installed: true, installable: true, update_available: false, dependencies: [] }] }),
+  getDatabases: async (client = 'acme') => ({ client, databases: [{ name: `19_${client}`, exists: true }] }),
+  getLogs: async () => ({ entries: [], next_cursor: null, has_more: false, cursor_reset: false }),
+  start: async () => ({}),
+  stop: async () => ({}),
+  restart: async () => ({}),
+};
+const snapshotView = render(createElement(OdooTuiRoute, { api: snapshotApi }));
+await waitFor(() => screen.getByText('19_acme'));
+await user.click(screen.getByRole('button', { name: 'Registered Odoo client' }));
+await waitFor(() => screen.getByRole('option', { name: /beta/ }));
+await user.click(screen.getByRole('option', { name: /beta/ }));
+await waitFor(() => screen.getByText('19_beta'));
+if (screen.queryByText('/private/beta.conf')) throw new Error('config_identity must not reach the rendered workspace');
+await user.click(screen.getByRole('button', { name: 'Registered Odoo client' }));
+await waitFor(() => screen.getByRole('option', { name: /acme/ }));
+await user.click(screen.getByRole('option', { name: /acme/ }));
+await waitFor(() => screen.getByText('19_acme'));
+delayBetaIdentity = true;
+await user.click(screen.getByRole('button', { name: 'Registered Odoo client' }));
+await waitFor(() => screen.getByRole('option', { name: /beta/ }));
+await user.click(screen.getByRole('option', { name: /beta/ }));
+if (!screen.getByText('19_beta')) throw new Error('cached beta snapshot was cleared during refresh');
+if (screen.queryByTestId('odoo-tui-state-notice')) throw new Error('cached refresh should not replace ready workspace with loading notice');
+betaIdentityResolvers[0]?.();
+await waitFor(() => screen.getByText('19_beta'));
+snapshotView.unmount();
+console.log('per-client snapshot preservation PASS');
+
+let betaOnline = false;
+let databaseAvailable = false;
+const statusPollCalls: string[] = [];
+const databasePollCalls: boolean[] = [];
+const pollingApi = {
+  ...snapshotApi,
+  getStatus: async (client = 'acme') => {
+    statusPollCalls.push(client);
+    const online = client === 'beta' ? betaOnline : true;
+    return { status: { state: online ? 'online' as const : 'stopped' as const, pid: online ? 123 : null, process_name: `odoo-19-${client}-local`, pm2_id: client === 'beta' ? 2 : 1, startup_mode: null } };
+  },
+  getDatabases: async (client = 'acme') => {
+    databasePollCalls.push(databaseAvailable);
+    return { client, databases: [{ name: `19_${client}`, exists: client === 'acme' ? databaseAvailable : true }] };
+  },
+};
+const originalSetInterval = window.setInterval;
+const originalSetTimeout = window.setTimeout;
+window.setInterval = ((handler: Parameters<typeof window.setInterval>[0]) => originalSetInterval(handler, 10)) as typeof window.setInterval;
+window.setTimeout = ((handler: Parameters<typeof window.setTimeout>[0], timeout?: number) => originalSetTimeout(handler, timeout && timeout >= 3000 ? 10 : timeout)) as typeof window.setTimeout;
+const pollingView = render(createElement(OdooTuiRoute, { api: pollingApi }));
+await new Promise((resolve) => setTimeout(resolve, 80));
+if (!statusPollCalls.includes('beta')) throw new Error('background polling did not refresh beta status before selector open');
+if (databasePollCalls.filter((available) => available === false).length === 0) throw new Error('database baseline was not read');
+betaOnline = true;
+databaseAvailable = true;
+await waitFor(() => {
+  if (!statusPollCalls.includes('beta') || !databasePollCalls.includes(true)) throw new Error('background polling did not observe external state changes');
+});
+pollingView.unmount();
+window.setInterval = originalSetInterval;
+window.setTimeout = originalSetTimeout;
+console.log('background runtime polling PASS');
+
+const snapshotRequests: Array<string | undefined> = [];
+const snapshotEnvelope = (client?: string) => client ? {
+  protocol_version: 1 as const,
+  process_instance_id: '0123456789abcdef0123456789abcdef',
+  registry_epoch: 0,
+  registry_identity: '[["acme","[\\"acme\\",\\"19\\",\\"local\\",null]"]]',
+  releases: [{ version: '19' }],
+  releases_error: null,
+  client: 'acme',
+  snapshot: {
+    registry_identity: '["acme","19","local",null]',
+    identity: { client: 'acme', release: '19', environment: 'local', database: '19_acme', http_port: 8069, longpolling_port: 8072 },
+    status: { state: 'online' as const, pid: 123, process_name: 'odoo-19-acme-local', pm2_id: 1, startup_mode: null },
+    control: { control_mode: 'client' as const, lifecycle_eligible: true, reason: null },
+    modules: [{ name: 'base', version: '1.0', installed: true, installable: true, update_available: false, dependencies: [] }],
+    databases: [{ name: '19_acme', exists: true }],
+  },
+  errors: {},
+} : {
+  protocol_version: 1 as const,
+  process_instance_id: '0123456789abcdef0123456789abcdef',
+  registry_epoch: 0,
+  registry_identity: '[["acme","[\\"acme\\",\\"19\\",\\"local\\",null]"]]',
+  clients: [{ name: 'acme', release: '19', environment: 'local', local_url: null, registry_identity: '["acme","19","local",null]' }],
+  releases: [{ version: '19' }],
+  releases_error: null,
+  errors: {},
+};
+const backendSnapshotApi = {
+  ...api,
+  getSnapshot: async (client?: string) => { snapshotRequests.push(client); return snapshotEnvelope(client); },
+};
+const backendSnapshotView = render(createElement(OdooTuiRoute, { api: backendSnapshotApi }));
+await new Promise((resolve) => setTimeout(resolve, 20));
+await waitFor(() => { if (screen.queryAllByText('19_acme').length === 0) throw new Error('snapshot client data was not rendered'); });
+if (snapshotRequests[0] !== undefined || snapshotRequests[1] !== 'acme') throw new Error('snapshot API request topology is incorrect');
+if (screen.queryByText('/private/acme.conf')) throw new Error('snapshot identity leaked config data');
+backendSnapshotView.unmount();
+console.log('snapshot consumer PASS');
+
+let initialCollectionBusy = true;
+const initialBusyApi: typeof backendSnapshotApi = {
+  ...backendSnapshotApi,
+  getSnapshot: async (client?: string) => {
+    if (!client && initialCollectionBusy) {
+      initialCollectionBusy = false;
+      const error = new Error('busy') as Error & { code: string };
+      error.code = 'SNAPSHOT_BUSY';
+      throw error;
+    }
+    return snapshotEnvelope(client);
+  },
+};
+const initialBusyView = render(createElement(OdooTuiRoute, { api: initialBusyApi }));
+await waitFor(() => { if (screen.queryAllByText('19_acme').length === 0) throw new Error('initial collection busy did not retry'); }, { timeout: 2000 });
+initialBusyView.unmount();
+console.log('initial collection backpressure PASS');
