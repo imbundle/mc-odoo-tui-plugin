@@ -1,4 +1,4 @@
-import type { PluginManifest } from './types';
+import type { PluginManifest } from './types'
 
 const manifest: PluginManifest = {
   id: 'odoo-tui',
@@ -22,6 +22,6 @@ const manifest: PluginManifest = {
     { method: 'POST', path: '/odoo-tui/instance/stop', handler: 'stopInstance', authRequired: true },
     { method: 'POST', path: '/odoo-tui/instance/restart', handler: 'restartInstance', authRequired: true },
   ],
-};
+}
 
-export default manifest;
+export default manifest

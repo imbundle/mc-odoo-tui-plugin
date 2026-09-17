@@ -1,1 +1,7 @@
-{"client": "acme", "databases": [{"name": "acme", "exists": true}, {"name": "acme_test", "exists": true}]}
+{
+  "client": "acme",
+  "databases": [
+    { "name": "acme", "exists": true },
+    { "name": "acme_test", "exists": true }
+  ]
+}
