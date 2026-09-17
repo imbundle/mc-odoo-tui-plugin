@@ -1,1 +1,1 @@
-export { default } from './OdooTuiRoute';
+export { default } from './OdooTuiRoute'

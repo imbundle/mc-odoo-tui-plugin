@@ -8,12 +8,12 @@ This is the plugin-owned application contract for the first log API. It is delib
 
 Query parameters:
 
-| Parameter | Type | Required | Semantics |
-| --- | --- | --- | --- |
-| `cursor` | opaque string | no | Position returned by a previous response. Omission starts at the beginning of the current file. |
-| `limit` | positive integer | no | Maximum number of returned entries. Default `100`; accepted range `1..500` inclusive. |
-| `level` | `ERROR`, `WARNING`, or `INFO` | no | Exact severity filter. Matching is case-sensitive; an unsupported value is a validation error. |
-| `pattern` | regular-expression string | no | Python regular expression matched against the parsed entry message. It is not a shell expression and is never evaluated by the frontend. |
+| Parameter | Type                          | Required | Semantics                                                                                                                                |
+| --------- | ----------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `cursor`  | opaque string                 | no       | Position returned by a previous response. Omission starts at the beginning of the current file.                                          |
+| `limit`   | positive integer              | no       | Maximum number of returned entries. Default `100`; accepted range `1..500` inclusive.                                                    |
+| `level`   | `ERROR`, `WARNING`, or `INFO` | no       | Exact severity filter. Matching is case-sensitive; an unsupported value is a validation error.                                           |
+| `pattern` | regular-expression string     | no       | Python regular expression matched against the parsed entry message. It is not a shell expression and is never evaluated by the frontend. |
 
 The backend resolves the required URL-encoded `client` query parameter to a registered instance and its approved log file. The browser cannot provide a filesystem path.
 
