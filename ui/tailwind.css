@@ -1,0 +1,30 @@
+/* External plugin sources are skipped by the host's Tailwind scanner. Keep this
+ * entry local to the route so Tailwind 4 generates Odoo's own utility classes. */
+@layer theme, base, components, utilities;
+
+@import 'tailwindcss/theme' layer(theme);
+@import 'tailwindcss/utilities' layer(utilities);
+
+@source './OdooTuiRoute.tsx';
+@source './OdooWorkspace.tsx';
+@source './LogWorkspace.tsx';
+@source './PasswordCapability.tsx';
+@source './Button.tsx';
+
+@theme inline {
+  --color-surface: var(--color-surface);
+  --color-surface-raised: var(--color-surface-raised);
+  --color-surface-sunken: var(--color-surface-sunken);
+  --color-border: var(--color-border);
+  --color-border-subtle: var(--color-border-subtle);
+  --color-text: var(--color-text);
+  --color-text-muted: var(--color-text-muted);
+  --color-text-subtle: var(--color-text-subtle);
+  --color-accent: var(--color-accent);
+  --color-accent-subtle: var(--color-accent-subtle);
+  --color-positive: var(--color-positive);
+  --color-positive-subtle: var(--color-positive-subtle);
+  --color-warning: var(--color-warning);
+  --color-negative: var(--color-negative);
+  --color-negative-subtle: var(--color-negative-subtle);
+}
