@@ -190,6 +190,18 @@ if (!screen.getByRole('button', { name: 'Restart' }).querySelector('svg'))
   throw new Error('lifecycle buttons must render an icon')
 if (!view.container.querySelector('[data-testid="client-selection"] [data-testid="runtime-status"]'))
   throw new Error('runtime status must be inside the selected client card')
+if (!view.container.querySelector('[data-testid="client-selection"] [data-testid="client-site-link"]'))
+  throw new Error('site link must be inside the selected client card while online with a confirmed port')
+{
+  const siteLink = screen.getByTestId('client-site-link') as HTMLAnchorElement
+  if (siteLink.getAttribute('href') !== 'http://localhost:8069')
+    throw new Error(
+      `site link href must combine current origin and client http_port, got ${siteLink.getAttribute('href')}`,
+    )
+  if (siteLink.getAttribute('target') !== '_blank') throw new Error('site link must open in a new tab')
+  if (siteLink.getAttribute('rel') !== 'noopener noreferrer')
+    throw new Error('site link must set rel=noopener noreferrer')
+}
 if (!screen.getByRole('button', { name: 'Client' })) throw new Error('Client start mode is missing')
 if (!screen.getByRole('button', { name: 'Database Manager' })) throw new Error('Database Manager start mode is missing')
 if (screen.queryByText('Start as')) throw new Error('start mode label is redundant')
@@ -427,6 +439,8 @@ const stoppedView = render(createElement(OdooTuiRoute, { api: stoppedApi }))
 await waitFor(() => screen.getByRole('button', { name: 'Start' }))
 if (!stoppedView.container.querySelector('[data-testid="client-selection"] [data-testid="runtime-status"]'))
   throw new Error('stopped runtime metadata is missing')
+if (stoppedView.container.querySelector('[data-testid="client-selection"] [data-testid="client-site-link"]'))
+  throw new Error('site link must not render for a stopped client')
 if ((screen.getByRole('button', { name: 'Start' }) as HTMLButtonElement).disabled)
   throw new Error('Start must be enabled while stopped')
 if (!(screen.getByRole('button', { name: 'Stop' }) as HTMLButtonElement).disabled)

@@ -3,6 +3,7 @@ import {
   Activity,
   AlertTriangle,
   Database as DatabaseIcon,
+  ExternalLink,
   GitBranch,
   ListTree,
   Package,
@@ -257,6 +258,11 @@ export function OdooWorkspace({
     control.lifecycle_eligible === true
   const online = status?.state === 'online'
   const stopped = status?.state === 'stopped'
+  const siteUrl =
+    identity?.http_port && identity.http_port > 0
+      ? `${window.location.protocol}//${window.location.hostname}:${identity.http_port}`
+      : null
+  const showSiteLink = Boolean(siteUrl) && readModelConfirmed && online
 
   return (
     <main
@@ -299,7 +305,9 @@ export function OdooWorkspace({
                     })
                   }}
                   disabled={state === 'loading' || busy}
-                  className="group border-border-subtle bg-surface hover:border-accent focus-visible:ring-accent/60 flex min-h-[96px] w-full min-w-0 flex-col rounded-lg border px-3 py-2.5 text-left transition-all duration-200 focus-visible:ring-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60"
+                  className={`group border-border-subtle bg-surface hover:border-accent focus-visible:ring-accent/60 flex min-h-[96px] w-full min-w-0 flex-col border px-3 pt-2.5 text-left transition-all duration-200 focus-visible:ring-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60 ${
+                    showSiteLink ? 'rounded-t-lg border-b-0 pb-0' : 'rounded-lg pb-2.5'
+                  }`}
                 >
                   <span className="flex min-w-0 items-center gap-2">
                     <span
@@ -325,13 +333,26 @@ export function OdooWorkspace({
                   <span
                     data-testid="runtime-status"
                     aria-label="Runtime process"
-                    className="text-text-muted mt-1 min-w-0 truncate font-mono text-[11px]"
+                    className="text-text-muted mt-1 min-w-0 truncate pb-2.5 font-mono text-[11px]"
                   >
                     {status?.process_name || 'Process identity unavailable'}
                     {status?.pid != null ? ` · PID ${status.pid}` : ''}
                     {status?.pm2_id != null ? ` · PM2 ${status.pm2_id}` : ''}
                   </span>
                 </button>
+                {showSiteLink && siteUrl && (
+                  <a
+                    href={siteUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    data-testid="client-site-link"
+                    aria-label={`Open ${selectedClient?.name || 'client'} Odoo site`}
+                    className="text-accent hover:text-accent/80 focus-visible:ring-accent/60 border-border-subtle bg-surface hover:border-accent -mt-px flex min-w-0 items-center gap-1.5 rounded-b-lg border border-t-0 px-3 py-2 text-xs font-medium transition-colors focus-visible:ring-2 focus-visible:outline-none"
+                  >
+                    <ExternalLink aria-hidden="true" size={14} className="shrink-0" />
+                    <span className="truncate">Apri sito</span>
+                  </a>
+                )}
                 <div
                   id="client-accordion-list"
                   data-testid="client-accordion"
